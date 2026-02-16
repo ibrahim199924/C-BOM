@@ -1,0 +1,15 @@
+{
+  "project": "C-BOM",
+  "version": "1.0.0",
+  "description": "Component Bill of Materials Management Tool",
+  "author": "C-BOM Team",
+  "license": "MIT",
+  "settings": {
+    "default_export_format": "json",
+    "default_version_dir": ".cbom_versions",
+    "keep_versions": 10,
+    "enable_audit_logging": true,
+    "minimum_supplier_threshold": 100,
+    "gui_theme": "default"
+  }
+}

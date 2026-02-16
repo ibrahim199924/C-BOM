@@ -1,0 +1,81 @@
+{
+  "metadata": {
+    "project_name": "Electronics Project",
+    "description": "Simple circuit with resistors and capacitors",
+    "total_components": 3,
+    "total_cost": 51.25,
+    "created_date": "2026-02-16T09:30:15.657496",
+    "last_modified": "2026-02-16T09:30:15.657622",
+    "categories": [
+      "Resistors",
+      "Microcontrollers",
+      "Capacitors"
+    ],
+    "version": "1.0.0",
+    "audit_log_entries": 3
+  },
+  "components": [
+    {
+      "id": "R1",
+      "name": "Resistor 10k Ohm",
+      "category": "Resistors",
+      "quantity": 10,
+      "unit_cost": 0.05,
+      "supplier": "ElectroSupply",
+      "part_number": "RS-10K",
+      "description": null,
+      "datasheet_url": null,
+      "lead_time_days": null,
+      "manufacturer": "TDK"
+    },
+    {
+      "id": "C1",
+      "name": "Capacitor 100uF",
+      "category": "Capacitors",
+      "quantity": 5,
+      "unit_cost": 0.15,
+      "supplier": "ElectroSupply",
+      "part_number": "CAP-100UF",
+      "description": null,
+      "datasheet_url": null,
+      "lead_time_days": null,
+      "manufacturer": "Murata"
+    },
+    {
+      "id": "IC1",
+      "name": "Arduino Uno Microcontroller",
+      "category": "Microcontrollers",
+      "quantity": 2,
+      "unit_cost": 25.0,
+      "supplier": "Arduino Official",
+      "part_number": "A000066",
+      "description": null,
+      "datasheet_url": null,
+      "lead_time_days": 5,
+      "manufacturer": "Arduino"
+    }
+  ],
+  "audit_log": [
+    {
+      "timestamp": "2026-02-16T09:30:15.657548",
+      "action": "added",
+      "component_id": "R1",
+      "component_name": "Resistor 10k Ohm",
+      "user": "unknown"
+    },
+    {
+      "timestamp": "2026-02-16T09:30:15.657609",
+      "action": "added",
+      "component_id": "C1",
+      "component_name": "Capacitor 100uF",
+      "user": "unknown"
+    },
+    {
+      "timestamp": "2026-02-16T09:30:15.657623",
+      "action": "added",
+      "component_id": "IC1",
+      "component_name": "Arduino Uno Microcontroller",
+      "user": "unknown"
+    }
+  ]
+}

@@ -1,0 +1,133 @@
+{
+  "project_name": "TLS/Encryption Audit",
+  "description": "Organization's cryptographic assets inventory",
+  "created_date": "2026-02-16T10:30:50.820365",
+  "last_modified": "2026-02-16T10:30:50.820451",
+  "version": "1.0.0",
+  "assets": [
+    {
+      "id": "AES-1",
+      "name": "AES-256-GCM Data Encryption",
+      "asset_type": "algorithm",
+      "algorithm": "AES-256-GCM",
+      "key_length": 256,
+      "cipher_mode": "GCM",
+      "purpose": "encryption",
+      "library": "OpenSSL 3.0.1",
+      "version": "",
+      "status": "active",
+      "compliance": [
+        "FIPS 140-2",
+        "PCI-DSS"
+      ],
+      "vulnerability_score": 0.0,
+      "known_cves": [],
+      "rotation_schedule": "90 days",
+      "last_audit_date": "",
+      "expiration_date": "",
+      "description": "Primary encryption algorithm",
+      "dependencies": [],
+      "notes": ""
+    },
+    {
+      "id": "RSA-1",
+      "name": "RSA-2048 Key Exchange",
+      "asset_type": "key",
+      "algorithm": "RSA-2048",
+      "key_length": 2048,
+      "cipher_mode": "",
+      "purpose": "key_exchange",
+      "library": "OpenSSL 3.0.1",
+      "version": "",
+      "status": "active",
+      "compliance": [
+        "FIPS 140-2"
+      ],
+      "vulnerability_score": 0.0,
+      "known_cves": [],
+      "rotation_schedule": "1 year",
+      "last_audit_date": "",
+      "expiration_date": "",
+      "description": "TLS key exchange",
+      "dependencies": [],
+      "notes": ""
+    },
+    {
+      "id": "TLS13",
+      "name": "TLS 1.3 Cipher Suite",
+      "asset_type": "cipher_suite",
+      "algorithm": "TLS 1.3",
+      "key_length": 0,
+      "cipher_mode": "",
+      "purpose": "authentication",
+      "library": "OpenSSL 3.0.1",
+      "version": "",
+      "status": "active",
+      "compliance": [
+        "FIPS 140-2",
+        "PCI-DSS"
+      ],
+      "vulnerability_score": 0.0,
+      "known_cves": [],
+      "rotation_schedule": "",
+      "last_audit_date": "",
+      "expiration_date": "",
+      "description": "Modern TLS protocol",
+      "dependencies": [],
+      "notes": ""
+    },
+    {
+      "id": "LEGACY",
+      "name": "Legacy SHA-1 Hashing",
+      "asset_type": "algorithm",
+      "algorithm": "SHA-1",
+      "key_length": 0,
+      "cipher_mode": "",
+      "purpose": "hashing",
+      "library": "OpenSSL 1.1.1",
+      "version": "",
+      "status": "deprecated",
+      "compliance": [],
+      "vulnerability_score": 8.5,
+      "known_cves": [
+        "CVE-2020-12345"
+      ],
+      "rotation_schedule": "",
+      "last_audit_date": "",
+      "expiration_date": "",
+      "description": "Legacy hash - deprecated, should replace with SHA-256",
+      "dependencies": [],
+      "notes": ""
+    }
+  ],
+  "audit_log": [
+    {
+      "timestamp": "2026-02-16T10:30:50.820388",
+      "action": "added",
+      "asset_id": "AES-1",
+      "asset_name": "AES-256-GCM Data Encryption",
+      "user": "unknown"
+    },
+    {
+      "timestamp": "2026-02-16T10:30:50.820422",
+      "action": "added",
+      "asset_id": "RSA-1",
+      "asset_name": "RSA-2048 Key Exchange",
+      "user": "unknown"
+    },
+    {
+      "timestamp": "2026-02-16T10:30:50.820439",
+      "action": "added",
+      "asset_id": "TLS13",
+      "asset_name": "TLS 1.3 Cipher Suite",
+      "user": "unknown"
+    },
+    {
+      "timestamp": "2026-02-16T10:30:50.820453",
+      "action": "added",
+      "asset_id": "LEGACY",
+      "asset_name": "Legacy SHA-1 Hashing",
+      "user": "unknown"
+    }
+  ]
+}
