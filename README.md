@@ -1,6 +1,6 @@
 # Cryptographic Bill of Materials (C-BOM)
 
-A comprehensive Python tool for managing component bills of materials with advanced features including version control, hierarchical BOMs, validation, and a user-friendly GUI.
+A comprehensive Python tool for managing cryptographic bills of materials with advanced features including version control, hierarchical BOMs, validation, vulnerability tracking, and multi-interface access.
 
 ## Features
 

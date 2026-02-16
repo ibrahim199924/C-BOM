@@ -1,7 +1,7 @@
 # C-BOM Complete Project Index
 
 ## 🎯 Project Overview
-A comprehensive Python application for managing Component Bills of Materials (C-BOM) with version control, hierarchical support, validation, and GUI.
+A comprehensive Python application for managing Cryptographic Bills of Materials (C-BOM) with version control, hierarchical support, vulnerability tracking, and multi-interface access.
 
 ## 📂 Directory Structure & Files
 
