@@ -1,171 +1,264 @@
-# Example usage of C-BOM library
+# Example usage of C-BOM Cryptographic Bill of Materials library
 
-from cbom import Component, ComponentBOM, BOMValidator, VersionControl, HierarchicalBOM
+from cbom import CryptoAsset, CryptoBOM, CryptoBOMValidator, VersionControl, HierarchicalCryptoBOM
 
-def example_basic_bom():
-    """Create a basic BOM"""
-    bom = ComponentBOM("Electronics Project", "Simple LED circuit")
+def example_tls_security_bom():
+    """Example: Create a TLS/Security focused BOM with cryptographic assets"""
+    bom = CryptoBOM("TLS/Security Audit", "Cryptographic assets for TLS/SSL infrastructure")
     
-    # Add resistor
-    bom.add_component(Component(
-        id="R1",
-        name="Resistor 220 Ohm",
-        category="Resistors",
-        quantity=5,
-        unit_cost=0.02,
-        supplier="ElectroSupply",
-        part_number="RES-220",
-        manufacturer="TDK"
+    # Add AES encryption algorithm
+    bom.add_asset(CryptoAsset(
+        id="AES-1",
+        name="AES-256-GCM",
+        asset_type="algorithm",
+        algorithm="AES-256-GCM",
+        key_length=256,
+        cipher_mode="GCM",
+        purpose="encryption",
+        status="active",
+        compliance=["FIPS 140-2", "PCI-DSS"],
+        vulnerability_score=1.0
     ))
     
-    # Add capacitor
-    bom.add_component(Component(
-        id="C1",
-        name="Capacitor 10uF",
-        category="Capacitors",
-        quantity=3,
-        unit_cost=0.10,
-        supplier="ElectroSupply",
-        part_number="CAP-10UF",
-        manufacturer="Murata"
+    # Add RSA key exchange
+    bom.add_asset(CryptoAsset(
+        id="RSA-1",
+        name="RSA-2048 Key Exchange",
+        asset_type="key",
+        algorithm="RSA",
+        key_length=2048,
+        purpose="key_exchange",
+        status="active",
+        compliance=["FIPS 140-2"],
+        vulnerability_score=2.5
     ))
     
-    # Add LED
-    bom.add_component(Component(
-        id="LED1",
-        name="LED Red 5mm",
-        category="Optoelectronics",
-        quantity=10,
-        unit_cost=0.15,
-        supplier="ElectroSupply",
-        part_number="LED-RED-5MM",
-        manufacturer="Kingbright"
+    # Add TLS 1.3 cipher suite
+    bom.add_asset(CryptoAsset(
+        id="TLS13",
+        name="TLS 1.3",
+        asset_type="cipher_suite",
+        algorithm="TLS 1.3",
+        purpose="encryption",
+        status="active",
+        compliance=["FIPS 140-2", "PCI-DSS", "HIPAA"],
+        vulnerability_score=0.5
+    ))
+    
+    # Add deprecated SHA-1 (vulnerability example)
+    bom.add_asset(CryptoAsset(
+        id="SHA1-LEGACY",
+        name="SHA-1 Hashing (Legacy)",
+        asset_type="algorithm",
+        algorithm="SHA-1",
+        key_length=160,
+        purpose="hashing",
+        status="deprecated",
+        known_cves=["CVE-2020-XXXX"],
+        vulnerability_score=9.8
     ))
     
     return bom
 
 
-def example_hierarchical_bom():
-    """Create a hierarchical BOM"""
-    main = HierarchicalBOM("Complete Device", "Full device assembly")
+def example_key_management_bom():
+    """Example: Key management and lifecycle tracking"""
+    bom = CryptoBOM("Key Management System", "Enterprise key inventory")
     
-    # Create sub-assemblies
-    power = HierarchicalBOM("Power Supply", "Power management")
-    signal = HierarchicalBOM("Signal Processing", "Signal processor module")
-    
-    main.add_subassembly(power)
-    main.add_subassembly(signal)
-    
-    # Add components to power supply
-    power.add_component(Component(
-        id="IC-PSU", name="LDO Regulator", category="ICs",
-        quantity=1, unit_cost=0.50, supplier="DigiKey",
-        part_number="AMS1117"
+    # Add master key
+    bom.add_asset(CryptoAsset(
+        id="MK-001",
+        name="Master Encryption Key",
+        asset_type="key",
+        algorithm="AES-256",
+        key_length=256,
+        purpose="encryption",
+        status="active",
+        compliance=["FIPS 140-2", "HIPAA"],
+        rotation_schedule="Yearly",
+        vulnerability_score=0.0
     ))
     
-    # Add components to signal processor
-    signal.add_component(Component(
-        id="IC-PROC", name="Microcontroller", category="ICs",
-        quantity=1, unit_cost=5.00, supplier="Arrow",
-        part_number="ATmega328"
+    # Add certificate
+    bom.add_asset(CryptoAsset(
+        id="CERT-001",
+        name="TLS Certificate (Example.com)",
+        asset_type="certificate",
+        algorithm="RSA-2048",
+        key_length=2048,
+        purpose="signing",
+        status="active",
+        compliance=["PCI-DSS"],
+        vulnerability_score=1.0
     ))
+    
+    # Add cryptographic library
+    bom.add_asset(CryptoAsset(
+        id="OPENSSL-1",
+        name="OpenSSL",
+        asset_type="library",
+        algorithm="Multiple",
+        version="3.0.0",
+        status="active",
+        compliance=["FIPS 140-2"],
+        vulnerability_score=2.5
+    ))
+    
+    return bom
+
+
+def example_compliance_check():
+    """Example: Run compliance checks on cryptographic BOM"""
+    bom = example_tls_security_bom()
+    
+    # Validate BOM
+    is_valid, messages = CryptoBOMValidator.validate_bom(bom)
+    
+    print("\n=== COMPLIANCE CHECK ===")
+    print(f"Valid: {is_valid}")
+    if not is_valid:
+        for msg in messages:
+            print(f"  - {msg}")
+    
+    # Get security posture
+    posture = CryptoBOMValidator.get_security_posture(bom)
+    print(f"\nSecurity Score: {posture['security_score']:.1f}/100")
+    print(f"Risk Level: {posture['risk_level']}")
+    
+    # Get recommendations
+    recommendations = CryptoBOMValidator.get_bom_recommendations(bom)
+    if recommendations:
+        print("\nRecommendations:")
+        for rec in recommendations[:3]:
+            print(f"  - {rec}")
+    
+    return bom
+
+
+def example_vulnerability_tracking():
+    """Example: Track and identify vulnerabilities"""
+    bom = CryptoBOM("Vulnerability Tracking", "Track known CVEs in crypto stack")
+    
+    # Add vulnerable algorithm
+    bom.add_asset(CryptoAsset(
+        id="MD5-1",
+        name="MD5 Hashing (Deprecated)",
+        asset_type="algorithm",
+        algorithm="MD5",
+        purpose="hashing",
+        status="vulnerable",
+        known_cves=["CVE-2008-1385", "CVE-2005-4353"],
+        vulnerability_score=9.8
+    ))
+    
+    # Add outdated SSL
+    bom.add_asset(CryptoAsset(
+        id="SSL2",
+        name="SSL 2.0 (Outdated)",
+        asset_type="cipher_suite",
+        algorithm="SSL 2.0",
+        status="vulnerable",
+        known_cves=["CVE-1995-XXXX"],
+        vulnerability_score=10.0
+    ))
+    
+    # Get vulnerable assets
+    vulnerable = bom.get_vulnerable_assets()
+    print("\n=== VULNERABLE ASSETS ===")
+    for asset in vulnerable:
+        print(f"{asset.id}: {asset.name}")
+        print(f"  CVEs: {', '.join(asset.known_cves) if asset.known_cves else 'None'}")
+        print(f"  Risk: {asset.risk_level()}")
+    
+    return bom
+
+
+def example_hierarchical_crypto_bom():
+    """Example: Hierarchical organization of crypto assets"""
+    # Create parent BOM
+    main = HierarchicalCryptoBOM(
+        "Enterprise Cryptography",
+        "Complete enterprise crypto infrastructure"
+    )
+    
+    # Add TLS encryption sub-assembly
+    tls_assembly = HierarchicalCryptoBOM(
+        "TLS Encryption",
+        "TLS and encryption algorithms"
+    )
+    
+    tls_assembly.add_asset(CryptoAsset(
+        id="TLS-AES",
+        name="AES for TLS",
+        asset_type="algorithm",
+        algorithm="AES-256-GCM",
+        status="active"
+    ))
+    
+    # Add key management sub-assembly
+    key_assembly = HierarchicalCryptoBOM(
+        "Key Management",
+        "Key generation and storage"
+    )
+    
+    key_assembly.add_asset(CryptoAsset(
+        id="KEY-GEN",
+        name="PRNG",
+        asset_type="library",
+        algorithm="ChaCha20",
+        status="active"
+    ))
+    
+    # Add sub-assemblies to main
+    main.add_sub_assembly("tls", tls_assembly)
+    main.add_sub_assembly("keys", key_assembly)
+    
+    print("\n=== HIERARCHICAL BOM ===")
+    print(main.get_hierarchy_summary())
     
     return main
 
 
-def example_validation():
-    """Demonstrate validation"""
-    bom = example_basic_bom()
-    
-    # Validate BOM
-    is_valid, errors = BOMValidator.validate_bom(bom)
-    print(f"BOM Valid: {is_valid}")
-    
-    if not is_valid:
-        print("Errors found:")
-        for error in errors:
-            print(f"  - {error}")
-    
-    # Get warnings
-    warnings = BOMValidator.get_bom_warnings(bom)
-    print(f"\nWarnings: {len(warnings)}")
-    for warning in warnings[:5]:
-        print(f"  - {warning}")
-    
-    # Check completeness
-    completeness = BOMValidator.validate_bom_completeness(bom)
-    print(f"\nBOM Completeness: {completeness['overall']}%")
-    print("Field Coverage:")
-    for field, pct in completeness['details'].items():
-        print(f"  {field}: {pct}%")
-
-
-def example_version_control():
-    """Demonstrate version control"""
-    bom = example_basic_bom()
-    vc = VersionControl(bom)
-    
-    # Create initial version
-    v1 = vc.create_version("Initial BOM")
-    print(f"Created version: {v1}")
-    
-    # Make changes
-    bom.add_component(Component(
-        id="R2", name="Resistor 1k", category="Resistors",
-        quantity=2, unit_cost=0.03, supplier="ElectroSupply"
-    ))
-    
-    # Create second version
-    v2 = vc.create_version("Added 1k resistor")
-    print(f"Created version: {v2}")
-    
-    # View history
-    print("\nVersion History:")
-    for version in vc.get_version_history():
-        print(f"  {version['version_id']}: {version['message']}")
-    
-    # Compare versions
-    if len(vc.get_version_history()) >= 2:
-        diff = vc.get_version_diff(v1, v2)
-        print(f"\nDifferences between {v1} and {v2}:")
-        print(f"  Added: {diff['added']}")
-        print(f"  Cost change: ${diff['cost_change']:.2f}")
-
-
-def main():
-    """Run all examples"""
-    print("=" * 60)
-    print("C-BOM Examples")
-    print("=" * 60)
-    
-    print("\n1. Basic BOM Example")
-    print("-" * 60)
-    bom = example_basic_bom()
-    print(bom.display_summary())
-    print(bom.display_components())
-    
-    print("\n2. Hierarchical BOM Example")
-    print("-" * 60)
-    h_bom = example_hierarchical_bom()
-    print(h_bom.display_tree())
-    print(f"\nTotal Components: {h_bom.get_component_count()}")
-    print(f"Total Cost: ${h_bom.get_total_cost():.2f}")
-    
-    print("\n3. Validation Example")
-    print("-" * 60)
-    example_validation()
-    
-    print("\n4. Version Control Example")
-    print("-" * 60)
-    example_version_control()
-    
-    print("\n5. Export Examples")
-    print("-" * 60)
-    bom = example_basic_bom()
-    bom.export_json("example_bom.json")
-    bom.export_csv("example_bom.csv")
-    print("Exported to example_bom.json and example_bom.csv")
-
-
 if __name__ == "__main__":
-    main()
+    print("C-BOM Cryptographic Bill of Materials Examples\n")
+    
+    # Example 1: TLS Security BOM
+    print("=" * 50)
+    print("Example 1: TLS Security BOM")
+    print("=" * 50)
+    bom1 = example_tls_security_bom()
+    summary = bom1.get_summary()
+    print(f"Total Assets: {summary['total_assets']}")
+    print(f"Critical Risk Assets: {summary['critical_risk']}")
+    print(f"Vulnerable Assets: {summary['vulnerable_assets']}")
+    
+    # Example 2: Key Management BOM
+    print("\n" + "=" * 50)
+    print("Example 2: Key Management BOM")
+    print("=" * 50)
+    bom2 = example_key_management_bom()
+    summary = bom2.get_summary()
+    print(f"Total Assets: {summary['total_assets']}")
+    print(f"Critical Risk Assets: {summary['critical_risk']}")
+    
+    # Example 3: Compliance Check
+    print("\n" + "=" * 50)
+    print("Example 3: Compliance Check")
+    print("=" * 50)
+    example_compliance_check()
+    
+    # Example 4: Vulnerability Tracking
+    print("\n" + "=" * 50)
+    print("Example 4: Vulnerability Tracking")
+    print("=" * 50)
+    example_vulnerability_tracking()
+    
+    # Example 5: Hierarchical BOM
+    print("\n" + "=" * 50)
+    print("Example 5: Hierarchical BOM")
+    print("=" * 50)
+    example_hierarchical_crypto_bom()
+    
+    print("\n" + "=" * 50)
+    print("Examples completed!")
+    print("=" * 50)

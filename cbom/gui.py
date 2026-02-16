@@ -16,7 +16,7 @@ class CBOMGUI:
     
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("Component Bill of Materials (C-BOM)")
+        self.root.title("Cryptographic Bill of Materials (C-BOM)")
         self.root.geometry("1200x700")
         
         self.bom: Optional[ComponentBOM] = None

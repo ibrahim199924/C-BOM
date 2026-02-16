@@ -2,7 +2,7 @@
 
 ## ✅ Project Successfully Created
 
-Your **Component Bill of Materials (C-BOM)** management system is now fully built and ready to use!
+Your **Cryptographic Bill of Materials (C-BOM)** management system is now fully built and ready to use!
 
 ## 📦 What Has Been Built
 

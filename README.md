@@ -1,4 +1,4 @@
-# Component Bill of Materials (C-BOM)
+# Cryptographic Bill of Materials (C-BOM)
 
 A comprehensive Python tool for managing component bills of materials with advanced features including version control, hierarchical BOMs, validation, and a user-friendly GUI.
 
@@ -232,4 +232,4 @@ For issues, questions, or suggestions, please open an issue in the project repos
 
 ---
 
-**C-BOM v1.0.0** - Professional Component Bill of Materials Management
+**C-BOM v1.0.0** - Professional Cryptographic Bill of Materials Management

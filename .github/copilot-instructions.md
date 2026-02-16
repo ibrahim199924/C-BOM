@@ -1,7 +1,7 @@
 ## C-BOM Development Instructions
 
 ### Project Overview
-C-BOM is a comprehensive Component Bill of Materials management tool with version control, hierarchical BOMs, validation, and GUI interface.
+C-BOM is a comprehensive Cryptographic Bill of Materials management tool with version control, hierarchical BOMs, validation, vulnerability tracking, and multi-interface access.
 
 ### Getting Started
 

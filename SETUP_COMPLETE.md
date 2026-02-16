@@ -1,7 +1,7 @@
 # C-BOM Project Setup Complete ✓
 
 ## Overview
-You now have a fully functional **Component Bill of Materials (C-BOM)** management system in Python with all requested features.
+You now have a fully functional **Cryptographic Bill of Materials (C-BOM)** management system in Python with all requested features.
 
 ## What's Included
 

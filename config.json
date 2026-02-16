@@ -1,7 +1,7 @@
 {
   "project": "C-BOM",
   "version": "1.0.0",
-  "description": "Component Bill of Materials Management Tool",
+  "description": "Cryptographic Bill of Materials Management Tool",
   "author": "C-BOM Team",
   "license": "MIT",
   "settings": {
