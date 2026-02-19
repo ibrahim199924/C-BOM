@@ -1,235 +1,172 @@
-# Cryptographic Bill of Materials (C-BOM)
+#  C-BOM  Cryptographic Bill of Materials
 
-A comprehensive Python tool for managing cryptographic bills of materials with advanced features including version control, hierarchical BOMs, validation, vulnerability tracking, and multi-interface access.
+**C-BOM** is a security tool for tracking, validating, and managing all cryptographic assets in a system  algorithms, keys, certificates, cipher suites, and more.
+
+[![Tests](https://github.com/ibrahim199924/C-BOM/actions/workflows/tests.yml/badge.svg)](https://github.com/ibrahim199924/C-BOM/actions)
+[![Python](https://img.shields.io/badge/python-3.8%2B-blue)](https://python.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+---
+
+## What is a Cryptographic Bill of Materials?
+
+A **C-BOM** (Cryptographic Bill of Materials) is an inventory of every cryptographic primitive used in a system  similar to a software BOM but focused on cryptography. It helps security teams:
+
+- Identify weak or broken algorithms (MD5, SHA-1, DES, RC4)
+- Track key expiration and rotation schedules
+- Audit compliance with FIPS 140-2, PCI-DSS, and HIPAA
+- Monitor known CVEs affecting cryptographic libraries
+- Respond quickly to cryptographic vulnerabilities (e.g., post-quantum migration)
+
+---
 
 ## Features
 
-- **Component Management**: Add, edit, and delete components with detailed properties
-- **BOM Tracking**: Manage complete bills of materials with cost analysis
-- **Validation**: Comprehensive validation for components and BOMs
-- **Version Control**: Track changes and maintain BOM history
-- **Hierarchical BOMs**: Support for assemblies and sub-assemblies
-- **Export/Import**: Support for JSON and CSV formats
-- **Audit Logging**: Track all changes with timestamps and user information
-- **GUI Interface**: User-friendly tkinter-based graphical interface
-- **CLI Mode**: Command-line interface for scripting and automation
+- **Asset Management**  Add, remove, and view cryptographic assets with full metadata
+- **Auto-status Detection**  Automatically flags weak algorithms as `deprecated` or `vulnerable`
+- **Risk Scoring**  Each asset gets a risk level: CRITICAL / HIGH / MEDIUM / LOW
+- **BOM Validation**  Per-asset validation with detailed error reporting
+- **Security Charts**  Risk distribution doughnut chart, asset-type bar chart, validation overview chart
+- **Security Score**  Overall BOM health score (0100)
+- **Audit Log**  Every add/remove action is timestamped and logged
+- **Export**  Download your BOM as JSON or CSV
+- **Version Control**  Track BOM history and changes over time
+- **Hierarchical BOMs**  Model complex systems with sub-assemblies
+- **Web UI**  Clean browser-based dashboard (Flask)
+- **CLI Mode**  Scriptable command-line interface
+- **Desktop App**  Packaged as a standalone Windows `.exe`
 
-## Installation
-
-1. Clone or download the project
-2. Install Python 3.7+
-3. Install dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-## Usage
-
-### GUI Mode (Default)
-
-```bash
-python main.py
-```
-
-### CLI Mode
-
-```bash
-python main.py --cli
-```
+---
 
 ## Quick Start
 
-### Creating a BOM Programmatically
+### Run from source
 
-```python
-from cbom import Component, ComponentBOM
+```bash
+# Install dependencies
+pip install -r requirements.txt
 
-# Create a new BOM
-bom = ComponentBOM("My Project", "Description of the project")
+# Web UI (recommended)
+python main.py --web
+# Then open http://localhost:5000
 
-# Add components
-bom.add_component(Component(
-    id="R1",
-    name="Resistor 10k Ohm",
-    category="Resistors",
-    quantity=10,
-    unit_cost=0.05,
-    supplier="ElectroSupply",
-    part_number="RS-10K"
-))
-
-# View summary
-print(bom.display_summary())
-print(bom.display_components())
-
-# Export
-bom.export_json("my_bom.json")
-bom.export_csv("my_bom.csv")
+# CLI mode
+python main.py --cli
 ```
 
-### Validation
+### Windows Desktop App
 
-```python
-from cbom import BOMValidator
+Download `C-BOM.exe` from [Releases](https://github.com/ibrahim199924/C-BOM/releases), double-click to launch. No Python required.
 
-is_valid, errors = BOMValidator.validate_bom(bom)
-if is_valid:
-    print("BOM is valid!")
-else:
-    print("BOM has errors:")
-    for error in errors:
-        print(f"  - {error}")
+---
 
-# Check completeness
-completeness = BOMValidator.validate_bom_completeness(bom)
-print(f"BOM Completeness: {completeness['overall']}%")
-```
+## Web Interface
 
-### Version Control
+| Section | Description |
+|---------|-------------|
+| **Dashboard** | Security score, risk distribution chart, asset-type chart, audit log |
+| **Assets** | Full asset table with color-coded risk badges and  weak-algorithm warnings |
+| **Add Asset** | Live algorithm checker, auto-detects status, key-length validation |
+| **Validate** | Per-asset validation report with valid/invalid chart |
+| **Export** | Download BOM as JSON or CSV |
 
-```python
-from cbom import VersionControl
+---
 
-vc = VersionControl(bom)
-version_id = vc.create_version("Initial BOM")
-print(f"Created version: {version_id}")
+## Asset Fields
 
-# View history
-history = vc.get_version_history()
-for version in history:
-    print(f"  {version['version_id']}: {version['message']}")
-```
+| Field | Description | Example |
+|-------|-------------|---------|
+| **ID** | Unique identifier (uppercase) | `AES-GCM-1` |
+| **Name** | Human-readable name | `AES-256 Database Encryption` |
+| **Type** | `algorithm`, `key`, `certificate`, `cipher_suite`, `library` | `algorithm` |
+| **Algorithm** | Cryptographic algorithm name | `AES-256-GCM` |
+| **Key Length** | Key size in bits | `256` |
+| **Status** | `active`, `deprecated`, `vulnerable`, `expired`, `planned` | Auto-detected |
 
-### Hierarchical BOMs
+---
 
-```python
-from cbom import HierarchicalBOM, Component
+## Risk Levels
 
-main = HierarchicalBOM("Main Assembly", "Main circuit board")
-sub = HierarchicalBOM("Power Supply", "Power management circuit")
+| Level | Trigger |
+|-------|---------|
+|  **CRITICAL** | Status is `vulnerable` or asset is expired |
+|  **HIGH** | Weak algorithm (SHA-1, 3DES, etc.) or `deprecated` status |
+|  **MEDIUM** | CVSS score  4.0 |
+|  **LOW** | Strong algorithm, active, no known issues |
 
-main.add_subassembly(sub)
+---
 
-main.add_component(Component(
-    id="Q1", name="Transistor", category="Semiconductors",
-    quantity=1, unit_cost=0.50
-))
+## Weak / Broken Algorithms (Auto-Flagged)
 
-print(main.display_tree())
-```
+| Algorithm | Status Assigned | Why |
+|-----------|----------------|-----|
+| MD5 | `vulnerable` | Completely broken, hash collisions trivially found |
+| DES | `vulnerable` | 56-bit key, brute-forceable in hours |
+| RC4 | `vulnerable` | Multiple statistical biases, broken in TLS |
+| SHA-1 | `deprecated` | Collision attacks demonstrated (SHAttered) |
+| 3DES | `deprecated` | Sweet32 birthday attack |
+| RC2, RC5 | `vulnerable` | Weak and obsolete |
+| SSLv2, SSLv3 | `vulnerable` | Protocol-level vulnerabilities (POODLE, DROWN) |
+
+---
 
 ## Project Structure
 
 ```
 C-BOM/
-├── cbom/                      # Main package
-│   ├── __init__.py           # Package initialization
-│   ├── models.py             # Core data models
-│   ├── validator.py          # Validation logic
-│   ├── version_control.py    # Version control system
-│   ├── hierarchical.py       # Hierarchical BOM support
-│   └── gui.py                # GUI interface
-├── tests/
-│   └── test_cbom.py          # Test suite
-├── docs/                      # Documentation
-├── main.py                    # Entry point
-├── config.json               # Configuration
-├── requirements.txt          # Dependencies
-└── README.md                 # This file
+ cbom/
+    __init__.py         # Package exports
+    models.py           # CryptoAsset, CryptoBOM data models
+    validator.py        # CryptoValidator, CryptoBOMValidator
+    web_ui.py           # Flask web dashboard
+    version_control.py  # BOM version history
+    hierarchical.py     # HierarchicalCryptoBOM
+    gui.py              # Tkinter GUI (optional)
+ tests/
+    test_cbom.py        # pytest test suite
+ main.py                 # Entry point (--cli / --web / --gui)
+ app_launcher.py         # Desktop app launcher
+ examples.py             # Usage examples
+ requirements.txt
+ README.md
 ```
 
-## GUI Features
-
-- **Project Management**: Create, open, and save BOM projects
-- **Component Editor**: Add, edit, and delete components with validation
-- **Cost Analysis**: Real-time calculation of total BOM cost
-- **Export Options**: Export to JSON or CSV format
-- **Validation Tools**: Built-in BOM validation and completeness checking
-- **Audit Log**: View detailed history of all changes
-- **Version History**: Track and manage BOM versions
-
-## Validation Features
-
-- Component ID format validation
-- Cost reasonableness checks
-- Supplier verification for expensive items
-- Completeness metrics (part numbers, datasheets, suppliers, etc.)
-- Warnings for missing information
-
-## Data Model
-
-### Component
-
-A single component in the BOM with properties:
-- `id`: Unique identifier
-- `name`: Component name
-- `category`: Component category
-- `quantity`: Quantity in BOM
-- `unit_cost`: Cost per unit
-- `supplier`: Supplier name
-- `part_number`: Supplier part number
-- `description`: Detailed description
-- `datasheet_url`: Link to datasheet
-- `lead_time_days`: Expected delivery time
-- `manufacturer`: Component manufacturer
-
-### ComponentBOM
-
-A complete bill of materials containing:
-- Components
-- Project metadata
-- Audit log
-- Version information
-- Tags and categories
-
-### HierarchicalBOM
-
-A hierarchical structure supporting:
-- Parent-child relationships
-- Component aggregation
-- Cost rollup
-- Tree visualization
+---
 
 ## Running Tests
 
 ```bash
-pytest tests/test_cbom.py -v
+pip install pytest pytest-cov
+pytest tests/ -v --cov=cbom
 ```
-
-## Configuration
-
-Edit `config.json` to customize:
-- Default export format
-- Version control settings
-- Audit logging options
-- GUI theme preferences
-
-## Contributing
-
-Contributions are welcome! Please ensure:
-- Code follows PEP 8 style guide
-- All tests pass
-- New features include test coverage
-- Documentation is updated
-
-## License
-
-MIT License - See LICENSE file for details
-
-## Support
-
-For issues, questions, or suggestions, please open an issue in the project repository.
-
-## Roadmap
-
-- [ ] Database backend support
-- [ ] Multi-user collaboration
-- [ ] Advanced cost analysis and forecasting
-- [ ] Integration with supplier APIs
-- [ ] Mobile app support
-- [ ] Cloud synchronization
 
 ---
 
-**C-BOM v1.0.0** - Professional Cryptographic Bill of Materials Management
+## Building the Desktop App
+
+```bash
+pip install pyinstaller pillow
+python create_icon.py
+pyinstaller --onefile --windowed --icon=cbom.ico --name="C-BOM" --add-data "cbom;cbom" app_launcher.py
+# Output: dist/C-BOM.exe
+```
+
+---
+
+## Requirements
+
+- Python 3.8+
+- Flask 3.x
+- No external database  all data is in-memory (export to JSON/CSV to persist)
+
+---
+
+## License
+
+MIT  see [LICENSE](LICENSE)
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.

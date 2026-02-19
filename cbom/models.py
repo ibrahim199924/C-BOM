@@ -33,10 +33,34 @@ class CryptoAsset:
     dependencies: List[str] = field(default_factory=list)  # Other crypto assets it depends on
     notes: str = ""
     
+    # Algorithms known to be cryptographically broken or severely weak
+    WEAK_ALGORITHMS = {
+        'MD5', 'SHA-1', 'SHA1', 'DES', '3DES', 'RC4', 'RC2', 'RC5',
+        'SSLV2', 'SSLV3', 'NULL', 'EXPORT', 'BLOWFISH', 'SKIPJACK'
+    }
+
+    # Algorithms so broken they should be marked vulnerable, not just deprecated
+    VULNERABLE_ALGORITHMS = {'MD5', 'DES', 'RC4', 'RC2', 'RC5', 'SSLV2', 'SSLV3', 'NULL', 'EXPORT', 'SKIPJACK'}
+
+    @staticmethod
+    def auto_detect_status(algorithm: str) -> str:
+        """Automatically determine status based on algorithm strength."""
+        algo_upper = algorithm.upper()
+        if any(v in algo_upper for v in CryptoAsset.VULNERABLE_ALGORITHMS):
+            return 'vulnerable'
+        if any(w in algo_upper for w in CryptoAsset.WEAK_ALGORITHMS):
+            return 'deprecated'
+        return 'active'
+
     def risk_level(self) -> str:
-        """Calculate risk level based on vulnerability score and status"""
+        """Calculate risk level based on vulnerability score, status, and algorithm strength"""
         if self.status == "vulnerable" or self.is_expired():
             return "CRITICAL"
+        algo_upper = self.algorithm.upper()
+        if any(weak in algo_upper for weak in self.WEAK_ALGORITHMS):
+            return "HIGH"
+        if self.status == "deprecated":
+            return "HIGH"
         if self.vulnerability_score >= 7.0:
             return "HIGH"
         if self.vulnerability_score >= 4.0:
