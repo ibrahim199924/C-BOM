@@ -183,6 +183,7 @@ def create_web_ui(bom: Optional[CryptoBOM] = None, port: int = 5000):
                 margin-top: 15px;
                 font-weight: 600;
             }
+            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         </style>
         <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     </head>
@@ -199,6 +200,7 @@ def create_web_ui(bom: Optional[CryptoBOM] = None, port: int = 5000):
                 <button class="nav-btn" onclick="showSection('add-asset')">➕ Add</button>
                 <button class="nav-btn" onclick="showSection('validate')">✓ Validate</button>
                 <button class="nav-btn" onclick="showSection('export')">💾 Export</button>
+                <button class="nav-btn" onclick="showSection('scan')">🔍 Scan</button>
             </div>
             
             <div id="dashboard" class="section active">
@@ -306,6 +308,26 @@ def create_web_ui(bom: Optional[CryptoBOM] = None, port: int = 5000):
                 <div class="card">
                     <button class="primary" onclick="exportJSON()" style="margin-right: 10px;">JSON</button>
                     <button class="primary" onclick="exportCSV()">CSV</button>
+                </div>
+            </div>
+
+            <div id="scan" class="section">
+                <h2>🔍 Website Scanner</h2>
+                <div class="card">
+                    <p style="color:#666;margin-bottom:16px;">Scan any HTTPS website to inspect its TLS version, certificate validity, cipher suite, and HTTP security headers — then import findings directly into your BOM.</p>
+                    <div style="display:flex;gap:10px;align-items:flex-end;">
+                        <div style="flex:1;">
+                            <label>Website URL or Hostname</label>
+                            <input type="text" id="scanUrl" placeholder="e.g. https://example.com or github.com" onkeydown="if(event.key==='Enter')runScan()">
+                        </div>
+                        <button class="primary" id="scanBtn" onclick="runScan()" style="height:42px;min-width:100px;white-space:nowrap;">🔍 Scan</button>
+                    </div>
+                    <div id="scanSpinner" style="display:none;text-align:center;padding:30px;">
+                        <div style="border:4px solid #f0f0f0;border-top:4px solid #667eea;border-radius:50%;width:40px;height:40px;animation:spin 1s linear infinite;margin:0 auto;"></div>
+                        <p style="margin-top:10px;color:#666;">Scanning…</p>
+                    </div>
+                    <div id="scanError" style="display:none;margin-top:15px;padding:12px 16px;border-radius:4px;border-left:4px solid #dc3545;background:#f8d7da;color:#721c24;font-weight:600;"></div>
+                    <div id="scanResults" style="display:none;margin-top:25px;"></div>
                 </div>
             </div>
         </div>
@@ -556,6 +578,142 @@ def create_web_ui(bom: Optional[CryptoBOM] = None, port: int = 5000):
             function exportJSON() { window.location.href = '/api/export/json'; }
             function exportCSV()  { window.location.href = '/api/export/csv'; }
 
+            function runScan() {
+                const url = document.getElementById('scanUrl').value.trim();
+                if (!url) { alert('Please enter a URL or hostname.'); return; }
+                document.getElementById('scanSpinner').style.display = 'block';
+                document.getElementById('scanResults').style.display = 'none';
+                document.getElementById('scanError').style.display = 'none';
+                document.getElementById('scanBtn').disabled = true;
+                fetch('/api/scan', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({url})
+                }).then(r => r.json()).then(data => {
+                    document.getElementById('scanSpinner').style.display = 'none';
+                    document.getElementById('scanBtn').disabled = false;
+                    if (data.error) {
+                        const errDiv = document.getElementById('scanError');
+                        errDiv.textContent = '\u2717 ' + data.error;
+                        errDiv.style.display = 'block';
+                        return;
+                    }
+                    renderScanResults(data);
+                }).catch(e => {
+                    document.getElementById('scanSpinner').style.display = 'none';
+                    document.getElementById('scanBtn').disabled = false;
+                    const errDiv = document.getElementById('scanError');
+                    errDiv.textContent = '\u2717 Network error: ' + e.message;
+                    errDiv.style.display = 'block';
+                });
+            }
+
+            function renderScanResults(d) {
+                const wrap    = document.getElementById('scanResults');
+                const sevBg   = {CRITICAL:'#dc3545',HIGH:'#fd7e14',MEDIUM:'#ffc107',LOW:'#28a745',INFO:'#667eea'};
+                const sevFg   = {CRITICAL:'#fff',HIGH:'#fff',MEDIUM:'#333',LOW:'#fff',INFO:'#fff'};
+                const tlsBg   = {'TLSv1.3':'#28a745','TLSv1.2':'#667eea','TLSv1.1':'#fd7e14','TLSv1':'#dc3545','SSLv3':'#dc3545','SSLv2':'#dc3545'};
+                const tlsVer  = d.tls.version || 'Unknown';
+                const tlsColor = tlsBg[tlsVer] || '#ffc107';
+
+                let findingsHtml = '';
+                if (!d.findings.length) {
+                    findingsHtml = '<p style="color:#28a745;font-weight:600;padding:10px;">\u2713 No issues detected.</p>';
+                } else {
+                    d.findings.forEach(f => {
+                        const bg = sevBg[f.severity] || '#667eea';
+                        const fg = sevFg[f.severity] || '#fff';
+                        findingsHtml += `<div style="margin-bottom:10px;border-radius:6px;overflow:hidden;border:1px solid #e0e0e0;">
+                            <div style="background:${bg};color:${fg};padding:8px 14px;font-weight:600;display:flex;justify-content:space-between;align-items:center;">
+                                <span>${f.title}</span>
+                                <span style="font-size:0.75em;padding:2px 8px;border-radius:10px;background:rgba(0,0,0,0.15);">${f.severity}</span>
+                            </div>
+                            <div style="padding:10px 14px;background:#fafafa;color:#444;font-size:0.9em;">${f.detail}</div>
+                        </div>`;
+                    });
+                }
+
+                const cert = d.certificate;
+                const expDays = cert.days_until_expiry;
+                const expDisplay = expDays !== null && expDays !== undefined
+                    ? (cert.expired ? '\u26a0\ufe0f EXPIRED' : expDays + ' days left')
+                    : (cert.not_after || 'Unknown');
+                const expColor = cert.expired ? '#dc3545' : (expDays !== null && expDays < 30 ? '#fd7e14' : '#28a745');
+
+                const headers = [
+                    ['HSTS', d.headers.hsts],
+                    ['X-Content-Type-Options', d.headers.x_content_type],
+                    ['X-Frame-Options', d.headers.x_frame],
+                    ['Content-Security-Policy', d.headers.csp ? '\u2713 Present' : null]
+                ];
+                const headerRows = headers.map(([name, val]) =>
+                    `<tr><td style="font-weight:600;width:210px;padding:8px 12px;">${name}</td>` +
+                    `<td style="padding:8px 12px;">${val
+                        ? `<span style="color:#28a745;">\u2713 ${val.length > 70 ? val.slice(0,70)+'\u2026' : val}</span>`
+                        : `<span style="color:#dc3545;">\u2717 Missing</span>`
+                    }</td></tr>`
+                ).join('');
+
+                let importHtml = '';
+                if (d.assets_to_import && d.assets_to_import.length) {
+                    importHtml = `<div style="margin-top:20px;padding:16px;background:#f0f4ff;border-radius:8px;border:1px solid #c5d0ff;">
+                        <strong>\ud83d\udce5 Import to BOM</strong>
+                        <p style="margin:8px 0;color:#555;font-size:0.9em;">${d.assets_to_import.length} asset(s) found. Add them to your BOM inventory.</p>
+                        <button class="primary" id="importBtn" onclick="importScanAssets()">Import ${d.assets_to_import.length} Asset(s)</button>
+                        <span id="importDone" style="display:none;margin-left:12px;color:#28a745;font-weight:600;">\u2713 Imported!</span>
+                    </div>`;
+                }
+
+                wrap.innerHTML = `
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
+                        <div style="background:#f9f9f9;border-radius:8px;padding:18px;border:1px solid #e0e0e0;">
+                            <h4 style="margin-bottom:12px;color:#555;">\ud83d\udd12 TLS &amp; Cipher</h4>
+                            <table style="margin:0;"><tbody>
+                                <tr><td style="font-weight:600;width:130px;padding:6px 10px;">TLS Version</td>
+                                    <td style="padding:6px 10px;"><span style="background:${tlsColor};color:#fff;padding:2px 10px;border-radius:10px;font-size:0.85em;font-weight:600;">${tlsVer}</span></td></tr>
+                                <tr><td style="font-weight:600;padding:6px 10px;">Cipher Suite</td><td style="padding:6px 10px;font-size:0.9em;">${d.cipher.name || 'N/A'}</td></tr>
+                                <tr><td style="font-weight:600;padding:6px 10px;">Key Bits</td><td style="padding:6px 10px;">${d.cipher.bits || 'N/A'}</td></tr>
+                            </tbody></table>
+                        </div>
+                        <div style="background:#f9f9f9;border-radius:8px;padding:18px;border:1px solid #e0e0e0;">
+                            <h4 style="margin-bottom:12px;color:#555;">\ud83d\udcdc Certificate</h4>
+                            <table style="margin:0;"><tbody>
+                                <tr><td style="font-weight:600;width:130px;padding:6px 10px;">Subject</td><td style="padding:6px 10px;font-size:0.9em;">${cert.subject || 'N/A'}</td></tr>
+                                <tr><td style="font-weight:600;padding:6px 10px;">Issuer</td><td style="padding:6px 10px;font-size:0.9em;">${cert.issuer || 'N/A'}</td></tr>
+                                <tr><td style="font-weight:600;padding:6px 10px;">Expires</td><td style="padding:6px 10px;"><span style="color:${expColor};font-weight:600;">${expDisplay}</span></td></tr>
+                                <tr><td style="font-weight:600;padding:6px 10px;">SANs</td><td style="padding:6px 10px;font-size:0.85em;">${(cert.san||[]).slice(0,3).join(', ')||'N/A'}${cert.san&&cert.san.length>3?' +more':''}</td></tr>
+                            </tbody></table>
+                        </div>
+                    </div>
+                    <div style="background:#f9f9f9;border-radius:8px;padding:18px;border:1px solid #e0e0e0;margin-bottom:20px;">
+                        <h4 style="margin-bottom:12px;color:#555;">\ud83d\udee1\ufe0f Security Headers</h4>
+                        <table style="margin:0;"><thead><tr><th style="width:210px;">Header</th><th>Value</th></tr></thead>
+                        <tbody>${headerRows}</tbody></table>
+                    </div>
+                    <div>
+                        <h4 style="margin-bottom:12px;color:#555;">\u26a0\ufe0f Findings (${d.findings.length})</h4>
+                        ${findingsHtml}
+                    </div>
+                    ${importHtml}`;
+                wrap.style.display = 'block';
+                window._scanData = d;
+            }
+
+            function importScanAssets() {
+                if (!window._scanData || !window._scanData.assets_to_import) return;
+                const btn = document.getElementById('importBtn');
+                if (btn) btn.disabled = true;
+                fetch('/api/scan/import', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({assets: window._scanData.assets_to_import})
+                }).then(r => r.json()).then(res => {
+                    const done = document.getElementById('importDone');
+                    if (done) done.style.display = 'inline';
+                    if (res.added > 0) loadDashboard();
+                });
+            }
+
             window.onload = loadDashboard;
         </script>
     </body>
@@ -677,6 +835,186 @@ def create_web_ui(bom: Optional[CryptoBOM] = None, port: int = 5000):
         bom.export_csv(tmp)
         return send_file(tmp, as_attachment=True, download_name='cbom_export.csv')
     
+    @app.route('/api/scan', methods=['POST'])
+    def api_scan():
+        import ssl
+        import socket
+        import http.client
+        import datetime
+        from urllib.parse import urlparse
+
+        data = request.get_json(silent=True) or {}
+        raw_url = data.get('url', '').strip()
+        if not raw_url:
+            return jsonify({'error': 'No URL provided'})
+        if '://' not in raw_url:
+            raw_url = 'https://' + raw_url
+        try:
+            parsed = urlparse(raw_url)
+            hostname = parsed.hostname
+            port = parsed.port or 443
+            if not hostname:
+                return jsonify({'error': 'Invalid URL — could not parse hostname'})
+        except Exception as exc:
+            return jsonify({'error': f'Invalid URL: {exc}'})
+
+        result = {
+            'hostname': hostname,
+            'tls': {},
+            'certificate': {'subject': '', 'issuer': '', 'not_after': '',
+                            'expiry_date_str': '', 'days_until_expiry': None,
+                            'expired': False, 'san': []},
+            'cipher': {'name': '', 'bits': 0},
+            'headers': {'hsts': None, 'x_content_type': None, 'x_frame': None, 'csp': None},
+            'findings': [],
+            'assets_to_import': []
+        }
+
+        try:
+            ctx = ssl.create_default_context()
+            with socket.create_connection((hostname, port), timeout=10) as raw_sock:
+                with ctx.wrap_socket(raw_sock, server_hostname=hostname) as ssock:
+                    result['tls']['version'] = ssock.version()
+                    cipher = ssock.cipher()
+                    result['cipher'] = {
+                        'name': cipher[0] if cipher else '',
+                        'bits': cipher[2] if cipher else 0
+                    }
+                    cert = ssock.getpeercert()
+                    subject = dict(x[0] for x in cert.get('subject', []))
+                    issuer  = dict(x[0] for x in cert.get('issuer',  []))
+                    not_after = cert.get('notAfter', '')
+                    days_left = None
+                    expired   = False
+                    expiry_str = ''
+                    try:
+                        expiry_dt  = datetime.datetime.strptime(not_after, '%b %d %H:%M:%S %Y %Z')
+                        days_left  = (expiry_dt - datetime.datetime.utcnow()).days
+                        expired    = days_left < 0
+                        expiry_str = expiry_dt.strftime('%Y-%m-%d')
+                    except Exception:
+                        pass
+                    result['certificate'] = {
+                        'subject':           subject.get('commonName', hostname),
+                        'issuer':            issuer.get('organizationName', 'Unknown'),
+                        'not_after':         not_after,
+                        'expiry_date_str':   expiry_str,
+                        'days_until_expiry': days_left,
+                        'expired':           expired,
+                        'san':               [v for k, v in cert.get('subjectAltName', []) if k == 'DNS'][:5]
+                    }
+        except ssl.SSLCertVerificationError as exc:
+            return jsonify({'error': f'Certificate error: {exc}'})
+        except OSError as exc:
+            return jsonify({'error': f'Connection failed: {exc}'})
+        except Exception as exc:
+            return jsonify({'error': str(exc)})
+
+        try:
+            hctx = ssl.create_default_context()
+            conn = http.client.HTTPSConnection(hostname, port, timeout=10, context=hctx)
+            conn.request('HEAD', '/', headers={'User-Agent': 'C-BOM-Scanner/1.0'})
+            resp = conn.getresponse()
+            h = {k.lower(): v for k, v in resp.getheaders()}
+            result['headers'] = {
+                'hsts':           h.get('strict-transport-security'),
+                'x_content_type': h.get('x-content-type-options'),
+                'x_frame':        h.get('x-frame-options'),
+                'csp':            h.get('content-security-policy'),
+            }
+        except Exception:
+            pass
+
+        findings = []
+        tls_ver = result['tls'].get('version', '')
+        TLS_RISK = {
+            'SSLv2':   ('CRITICAL', 'Broken protocol: SSLv2',     'SSLv2 is completely broken. Disable immediately.'),
+            'SSLv3':   ('CRITICAL', 'Broken protocol: SSLv3',     'SSLv3 is vulnerable to POODLE. Disable immediately.'),
+            'TLSv1':   ('CRITICAL', 'Outdated: TLS 1.0',          'TLS 1.0 is deprecated (RFC 8996). Upgrade to TLS 1.3.'),
+            'TLSv1.1': ('HIGH',     'Deprecated: TLS 1.1',        'TLS 1.1 is deprecated (RFC 8996). Upgrade to TLS 1.3.'),
+            'TLSv1.2': ('LOW',      'TLS 1.2 in use',             'Acceptable, but TLS 1.3 offers stronger security and performance.'),
+            'TLSv1.3': ('INFO',     'TLS 1.3 in use \u2713',      'Excellent \u2014 TLS 1.3 is the latest and most secure version.'),
+        }
+        if tls_ver in TLS_RISK:
+            sev, title, detail = TLS_RISK[tls_ver]
+            findings.append({'severity': sev, 'title': title, 'detail': detail})
+
+        WEAK_CIPHERS = ['RC4', 'DES', 'NULL', 'EXPORT', 'ANON', '3DES', 'RC2']
+        cipher_name = result['cipher'].get('name', '')
+        if any(w in cipher_name.upper() for w in WEAK_CIPHERS):
+            findings.append({'severity': 'CRITICAL',
+                             'title': f'Weak cipher suite: {cipher_name}',
+                             'detail': 'This cipher is insecure. Disable it immediately.'})
+
+        cert = result['certificate']
+        if cert.get('expired'):
+            findings.append({'severity': 'CRITICAL', 'title': 'Certificate EXPIRED',
+                             'detail': 'The TLS certificate has expired. Visitors see browser security warnings.'})
+        elif cert.get('days_until_expiry') is not None:
+            days = cert['days_until_expiry']
+            if days < 14:
+                findings.append({'severity': 'CRITICAL', 'title': f'Certificate expires in {days} days',
+                                 'detail': 'Renew immediately to avoid service disruption.'})
+            elif days < 30:
+                findings.append({'severity': 'HIGH', 'title': f'Certificate expires in {days} days',
+                                 'detail': 'Renew soon to avoid interruption.'})
+            elif days < 90:
+                findings.append({'severity': 'MEDIUM', 'title': f'Certificate expires in {days} days',
+                                 'detail': 'Plan renewal in the near future.'})
+
+        if not result['headers'].get('hsts'):
+            findings.append({'severity': 'MEDIUM', 'title': 'Missing HSTS header',
+                             'detail': 'Strict-Transport-Security not set. Browsers may allow HTTP downgrade attacks.'})
+        if not result['headers'].get('x_content_type'):
+            findings.append({'severity': 'LOW', 'title': 'Missing X-Content-Type-Options',
+                             'detail': 'Set to "nosniff" to prevent MIME-type sniffing attacks.'})
+        if not result['headers'].get('x_frame'):
+            findings.append({'severity': 'LOW', 'title': 'Missing X-Frame-Options',
+                             'detail': 'Set to "DENY" or "SAMEORIGIN" to prevent clickjacking.'})
+        result['findings'] = findings
+
+        safe = hostname.replace('.', '-').replace('*', 'WILD').upper()
+        if tls_ver:
+            result['assets_to_import'].append({
+                'id':              f'TLS-{safe}',
+                'name':            f'TLS on {hostname}',
+                'asset_type':      'cipher_suite',
+                'algorithm':       tls_ver,
+                'key_length':      result['cipher'].get('bits', 0) or 0,
+                'expiration_date': ''
+            })
+        if cert.get('subject'):
+            result['assets_to_import'].append({
+                'id':              f'CERT-{safe}',
+                'name':            f'Certificate for {hostname}',
+                'asset_type':      'certificate',
+                'algorithm':       'X.509',
+                'key_length':      0,
+                'expiration_date': cert.get('expiry_date_str', '')
+            })
+        return jsonify(result)
+
+    @app.route('/api/scan/import', methods=['POST'])
+    def api_scan_import():
+        added = 0
+        data = request.get_json(silent=True) or {}
+        for ad in data.get('assets', []):
+            try:
+                asset = CryptoAsset(
+                    id=ad['id'],
+                    name=ad['name'],
+                    asset_type=ad['asset_type'],
+                    algorithm=ad['algorithm'],
+                    key_length=int(ad.get('key_length') or 0),
+                    expiration_date=ad.get('expiration_date', ''),
+                    status=CryptoAsset.auto_detect_status(ad['algorithm'])
+                )
+                bom.add_asset(asset)
+                added += 1
+            except Exception:
+                pass
+        return jsonify({'success': True, 'added': added})
+
     print(f"\n✓ C-BOM Web Interface Starting")
     print(f"  Open: http://localhost:{port}")
     print(f"  Press Ctrl+C to stop\n")
