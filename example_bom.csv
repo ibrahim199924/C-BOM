@@ -1,0 +1,4 @@
+id,name,category,quantity,unit_cost,total_cost,supplier,part_number,description,datasheet_url,lead_time_days,manufacturer
+R1,Resistor 10k Ohm,Resistors,10,0.05,0.5,ElectroSupply,RS-10K,,,,TDK
+C1,Capacitor 100uF,Capacitors,5,0.15,0.75,ElectroSupply,CAP-100UF,,,,Murata
+IC1,Arduino Uno Microcontroller,Microcontrollers,2,25.0,50.0,Arduino Official,A000066,,,5,Arduino
