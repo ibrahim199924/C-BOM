@@ -235,6 +235,27 @@ def create_web_ui(bom: Optional[CryptoBOM] = None, port: int = 5000):
             
             <div id="add-asset" class="section">
                 <h2>Add Asset</h2>
+
+                <div class="card" style="margin-bottom:16px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="toggleScanPanel()">
+                        <strong>🌐 Read assets from a website</strong>
+                        <span id="scanPanelArrow" style="font-size:0.85em;color:#667eea;">&#9660; expand</span>
+                    </div>
+                    <div id="scanPanel" style="display:none;margin-top:14px;">
+                        <p style="color:#666;font-size:0.9em;margin-bottom:10px;">Enter a hostname — the scanner will read its TLS version and certificate and pre-fill two assets below.</p>
+                        <div style="display:flex;gap:10px;align-items:flex-end;">
+                            <div style="flex:1;">
+                                <label>Hostname or URL</label>
+                                <input type="text" id="wsUrl" placeholder="e.g. github.com or https://example.com" onkeydown="if(event.key==='Enter'){event.preventDefault();scanWebsite();}">
+                            </div>
+                            <button type="button" class="primary" id="wsScanBtn" onclick="scanWebsite()" style="height:42px;min-width:90px;">Scan</button>
+                        </div>
+                        <div id="wsScanSpinner" style="display:none;margin-top:10px;color:#667eea;font-size:0.9em;">&#9203; Scanning&hellip;</div>
+                        <div id="wsScanError" style="display:none;margin-top:10px;padding:10px 14px;border-radius:4px;border-left:4px solid #dc3545;background:#f8d7da;color:#721c24;font-size:0.9em;"></div>
+                        <div id="wsScanAssets" style="display:none;margin-top:14px;"></div>
+                    </div>
+                </div>
+
                 <div class="card">
                     <form onsubmit="addAsset(event)">
                         <div class="form-group">
@@ -557,6 +578,68 @@ def create_web_ui(bom: Optional[CryptoBOM] = None, port: int = 5000):
             function exportJSON() { window.location.href = '/api/export/json'; }
             function exportCSV()  { window.location.href = '/api/export/csv'; }
 
+            function toggleScanPanel() {
+                const p = document.getElementById('scanPanel');
+                const a = document.getElementById('scanPanelArrow');
+                if (p.style.display === 'none') { p.style.display = 'block'; a.innerHTML = '&#9650; collapse'; }
+                else { p.style.display = 'none'; a.innerHTML = '&#9660; expand'; }
+            }
+
+            function scanWebsite() {
+                const raw = document.getElementById('wsUrl').value.trim();
+                if (!raw) { alert('Please enter a hostname.'); return; }
+                document.getElementById('wsScanSpinner').style.display = 'block';
+                document.getElementById('wsScanError').style.display = 'none';
+                document.getElementById('wsScanAssets').style.display = 'none';
+                document.getElementById('wsScanBtn').disabled = true;
+                fetch('/api/scan-website', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({url: raw})
+                }).then(r => r.json()).then(data => {
+                    document.getElementById('wsScanSpinner').style.display = 'none';
+                    document.getElementById('wsScanBtn').disabled = false;
+                    if (data.error) {
+                        const e = document.getElementById('wsScanError');
+                        e.textContent = '\u2717 ' + data.error;
+                        e.style.display = 'block';
+                        return;
+                    }
+                    let html = '<p style="margin-bottom:8px;font-size:0.9em;color:#555;">Found <strong>' + data.assets.length + '</strong> asset(s). Click one to pre-fill the form below:</p>';
+                    data.assets.forEach((a,i) => {
+                        const risk = ['MD5','SHA-1','SHA1','DES','RC4','3DES','SSLv2','SSLv3','TLSv1','TLSv1.1'].some(w => a.algorithm.toUpperCase().includes(w.toUpperCase())) ? '#fd7e14' : '#28a745';
+                        html += `<div onclick="prefillAsset(${i})" style="cursor:pointer;padding:10px 14px;border:1px solid #ddd;border-radius:6px;margin-bottom:8px;background:#f9f9f9;transition:background 0.2s;" onmouseover="this.style.background='#eef2ff'" onmouseout="this.style.background='#f9f9f9'">`
+                            + `<span style="font-weight:600;">${a.name}</span> &nbsp;<span style="font-size:0.8em;color:#777;">${a.asset_type}</span><br>`
+                            + `<span style="font-size:0.85em;">Algorithm: <strong>${a.algorithm}</strong>`
+                            + (a.key_length ? ` &nbsp; Key bits: <strong>${a.key_length}</strong>` : '')
+                            + (a.expiration_date ? ` &nbsp; Expires: <strong>${a.expiration_date}</strong>` : '')
+                            + `</span></div>`;
+                    });
+                    const wrap = document.getElementById('wsScanAssets');
+                    wrap.innerHTML = html;
+                    wrap.style.display = 'block';
+                    window._wsAssets = data.assets;
+                }).catch(err => {
+                    document.getElementById('wsScanSpinner').style.display = 'none';
+                    document.getElementById('wsScanBtn').disabled = false;
+                    const e = document.getElementById('wsScanError');
+                    e.textContent = '\u2717 ' + err.message;
+                    e.style.display = 'block';
+                });
+            }
+
+            function prefillAsset(i) {
+                const a = window._wsAssets[i];
+                document.getElementById('assetId').value    = a.id;
+                document.getElementById('assetName').value  = a.name;
+                document.getElementById('assetType').value  = a.asset_type;
+                document.getElementById('algorithm').value  = a.algorithm;
+                document.getElementById('keyLength').value  = a.key_length || '';
+                document.getElementById('status').value     = a.status || 'active';
+                checkAlgorithm(); checkKeyLength();
+                document.querySelector('.card form').scrollIntoView({behavior:'smooth'});
+            }
+
             window.onload = loadDashboard;
         </script>
     </body>
@@ -666,6 +749,79 @@ def create_web_ui(bom: Optional[CryptoBOM] = None, port: int = 5000):
             'errors': messages if not is_valid else []
         })
     
+    @app.route('/api/scan-website', methods=['POST'])
+    def api_scan_website():
+        import ssl, socket, datetime
+        from urllib.parse import urlparse
+
+        data = request.get_json(force=True, silent=True) or {}
+        raw = (data.get('url') or '').strip()
+        if not raw:
+            return jsonify({'error': 'No URL provided'})
+        if '://' not in raw:
+            raw = 'https://' + raw
+        try:
+            parsed = urlparse(raw)
+            hostname = parsed.hostname
+            port = parsed.port or 443
+            if not hostname:
+                return jsonify({'error': 'Could not parse hostname'})
+        except Exception as exc:
+            return jsonify({'error': str(exc)})
+
+        try:
+            ctx = ssl.create_default_context()
+            with socket.create_connection((hostname, port), timeout=10) as raw_sock:
+                with ctx.wrap_socket(raw_sock, server_hostname=hostname) as ssock:
+                    tls_ver  = ssock.version() or 'Unknown'
+                    cipher   = ssock.cipher()
+                    bits     = cipher[2] if cipher else 0
+                    cert     = ssock.getpeercert()
+                    def _rdn(seq):
+                        out = {}
+                        for rdn in seq:
+                            for k, v in rdn:
+                                out[k] = v.encode('ascii', 'replace').decode('ascii')
+                        return out
+                    subject  = _rdn(cert.get('subject',  ()))
+                    expiry_str = ''
+                    not_after  = cert.get('notAfter', '')
+                    try:
+                        expiry_dt  = datetime.datetime.strptime(not_after, '%b %d %H:%M:%S %Y %Z')
+                        expiry_str = expiry_dt.strftime('%Y-%m-%d')
+                    except Exception:
+                        pass
+        except ssl.SSLError as exc:
+            return jsonify({'error': f'TLS error: {exc}'})
+        except OSError as exc:
+            return jsonify({'error': f'Connection failed: {exc}'})
+        except Exception as exc:
+            return jsonify({'error': str(exc)})
+
+        safe = hostname.replace('.', '-').replace('*', 'WILD').upper()
+        tls_status = CryptoAsset.auto_detect_status(tls_ver)
+        assets = [
+            {
+                'id':              f'TLS-{safe}',
+                'name':            f'TLS on {hostname}',
+                'asset_type':      'cipher_suite',
+                'algorithm':       tls_ver,
+                'key_length':      bits,
+                'expiration_date': '',
+                'status':          tls_status
+            },
+            {
+                'id':              f'CERT-{safe}',
+                'name':            f'Certificate for {hostname}',
+                'asset_type':      'certificate',
+                'algorithm':       'X.509',
+                'key_length':      0,
+                'expiration_date': expiry_str,
+                'status':          'active'
+            }
+        ]
+        return jsonify({'assets': assets})
+
     @app.route('/api/export/json')
     def api_export_json():
         tmp = os.path.join(tempfile.gettempdir(), 'cbom_export.json')
