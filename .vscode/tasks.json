@@ -1,0 +1,15 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run C-BOM GUI",
+			"type": "shell",
+			"command": "c:/PYTHON314/python.exe",
+			"args": [
+				"main.py"
+			],
+			"problemMatcher": [],
+			"group": "none"
+		}
+	]
+}
