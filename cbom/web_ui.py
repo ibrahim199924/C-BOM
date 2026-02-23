@@ -200,7 +200,6 @@ def create_web_ui(bom: Optional[CryptoBOM] = None, port: int = 5000):
                 <button class="nav-btn" onclick="showSection('add-asset')">➕ Add</button>
                 <button class="nav-btn" onclick="showSection('validate')">✓ Validate</button>
                 <button class="nav-btn" onclick="showSection('export')">💾 Export</button>
-                <button class="nav-btn" onclick="resetBOM()" style="margin-left:auto;background:#dc3545;">🔴 Reset All</button>
             </div>
             
             <div id="dashboard" class="section active">
@@ -641,38 +640,6 @@ def create_web_ui(bom: Optional[CryptoBOM] = None, port: int = 5000):
                 document.querySelector('.card form').scrollIntoView({behavior:'smooth'});
             }
 
-            function resetBOM() {
-                const confirmed = confirm(
-                    '⚠️ WARNING: This will delete ALL assets and audit log data!\n\n' +
-                    'This action cannot be undone. Are you sure?'
-                );
-                
-                if (!confirmed) return;
-                
-                // Second confirmation
-                const doubleConfirm = confirm(
-                    '🔴 FINAL WARNING: About to permanently delete all data!\n\n' +
-                    'Type "YES" in the next prompt to confirm.'
-                );
-                
-                if (!doubleConfirm) return;
-                
-                const userInput = prompt('Type "YES" to confirm deletion of all data:');
-                if (userInput !== 'YES') {
-                    alert('Reset cancelled.');
-                    return;
-                }
-                
-                fetch('/api/reset', {method: 'POST'}).then(r => r.json()).then(res => {
-                    if (res.success) {
-                        alert('✓ BOM reset successfully!\n\nAll assets and audit log have been deleted.');
-                        location.reload();
-                    } else {
-                        alert('✗ Reset failed: ' + res.error);
-                    }
-                }).catch(err => alert('Error: ' + err));
-            }
-
             window.onload = loadDashboard;
         </script>
     </body>
@@ -866,15 +833,6 @@ def create_web_ui(bom: Optional[CryptoBOM] = None, port: int = 5000):
         tmp = os.path.join(tempfile.gettempdir(), 'cbom_export.csv')
         bom.export_csv(tmp)
         return send_file(tmp, as_attachment=True, download_name='cbom_export.csv')
-    
-    @app.route('/api/reset', methods=['POST'])
-    def api_reset():
-        """Reset BOM - delete all assets and audit log"""
-        try:
-            bom.reset_all()
-            return jsonify({'success': True, 'message': 'BOM reset successfully. All data deleted.'})
-        except Exception as e:
-            return jsonify({'success': False, 'error': str(e)})
     
     print(f"\n✓ C-BOM Web Interface Starting")
     print(f"  Open: http://localhost:{port}")
