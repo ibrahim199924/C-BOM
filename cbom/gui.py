@@ -56,6 +56,8 @@ class CBOMGUI:
         tools_menu.add_command(label="Validate BOM", command=self.validate_bom)
         tools_menu.add_command(label="View Audit Log", command=self.view_audit_log)
         tools_menu.add_command(label="Version History", command=self.view_version_history)
+        tools_menu.add_separator()
+        tools_menu.add_command(label="Reset All Data", command=self.reset_bom)
         
         # Main content
         self.create_main_content()
@@ -498,6 +500,41 @@ class CBOMGUI:
                 text.insert(tk.END, entry)
         
         text.config(state=tk.DISABLED)
+    
+    def reset_bom(self):
+        """Reset BOM - delete all components and clear data"""
+        if not self.bom:
+            messagebox.showerror("Error", "No project loaded")
+            return
+        
+        if len(self.bom.components) == 0:
+            messagebox.showinfo("Info", "BOM is already empty")
+            return
+        
+        # Multiple confirmations for safety
+        confirm1 = messagebox.askyesno(
+            "Confirm Reset",
+            "⚠️  WARNING: This will delete ALL components and audit log!\n\nAre you sure?"
+        )
+        if not confirm1:
+            return
+        
+        confirm2 = messagebox.askyesno(
+            "Final Confirmation",
+            "🔴 FINAL WARNING: This action cannot be undone!\n\nDelete all data?"
+        )
+        if not confirm2:
+            return
+        
+        # Clear all data
+        self.bom.components.clear()
+        self.bom.audit_log.clear()
+        self.bom.last_modified = __import__('datetime').datetime.now().isoformat()
+        
+        # Refresh display
+        self.refresh_display()
+        self.status_var.set("BOM reset - all data deleted")
+        messagebox.showinfo("Success", "✓ BOM has been reset successfully!\n\nAll components and audit log deleted.")
 
 
 def launch_gui():

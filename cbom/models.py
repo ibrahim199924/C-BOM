@@ -358,3 +358,19 @@ Asset Types:
         
         output += "-" * 100 + "\n"
         return output
+    
+    def reset_all(self) -> None:
+        """Reset BOM to initial state - delete all assets and audit log"""
+        self.assets.clear()
+        self.audit_log.clear()
+        self.last_modified = datetime.now().isoformat()
+        
+        # Log reset action
+        reset_audit = BOMAudits(
+            timestamp=datetime.now().isoformat(),
+            action="reset",
+            asset_id="SYSTEM",
+            asset_name="BOM Reset",
+            user="system"
+        )
+        self.audit_log.append(reset_audit)
