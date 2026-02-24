@@ -33,20 +33,19 @@ class VersionControl:
             "message": message,
             "user": user,
             "bom_summary": self.bom.get_summary(),
-            "components_count": len(self.bom.components),
-            "total_cost": self.bom.get_total_cost()
+            "components_count": len(self.bom.assets),
         }
         
         # Save BOM data
         bom_export = {
             "metadata": self.bom.get_summary(),
-            "components": [comp.to_dict() for comp in self.bom.components.values()],
+            "assets": [asset.to_dict() for asset in self.bom.assets.values()],
             "audit_log": [
                 {
                     "timestamp": audit.timestamp,
                     "action": audit.action,
-                    "component_id": audit.component_id,
-                    "component_name": audit.component_name,
+                    "asset_id": audit.asset_id,
+                    "asset_name": audit.asset_name,
                     "user": audit.user
                 }
                 for audit in self.bom.audit_log
@@ -81,27 +80,26 @@ class VersionControl:
         if not v1_data or not v2_data:
             return {"error": "One or both versions not found"}
         
-        v1_components = {c['id']: c for c in v1_data.get('components', [])}
-        v2_components = {c['id']: c for c in v2_data.get('components', [])}
+        v1_assets = {a['id']: a for a in v1_data.get('assets', [])}
+        v2_assets = {a['id']: a for a in v2_data.get('assets', [])}
         
         diff = {
             "added": [],
             "removed": [],
             "modified": [],
-            "cost_change": v2_data['metadata']['total_cost'] - v1_data['metadata']['total_cost']
         }
         
         # Find added and modified
-        for comp_id, comp_data in v2_components.items():
-            if comp_id not in v1_components:
-                diff["added"].append(comp_id)
-            elif v1_components[comp_id] != comp_data:
-                diff["modified"].append(comp_id)
+        for asset_id, asset_data in v2_assets.items():
+            if asset_id not in v1_assets:
+                diff["added"].append(asset_id)
+            elif v1_assets[asset_id] != asset_data:
+                diff["modified"].append(asset_id)
         
         # Find removed
-        for comp_id in v1_components:
-            if comp_id not in v2_components:
-                diff["removed"].append(comp_id)
+        for asset_id in v1_assets:
+            if asset_id not in v2_assets:
+                diff["removed"].append(asset_id)
         
         return diff
     
@@ -111,14 +109,14 @@ class VersionControl:
         if not version_data:
             return False
         
-        # Clear current components
-        self.bom.components.clear()
+        # Clear current assets
+        self.bom.assets.clear()
         
-        # Load components from version
-        for comp_data in version_data.get('components', []):
-            from .models import Component
-            component = Component.from_dict(comp_data)
-            self.bom.components[component.id] = component
+        # Load assets from version
+        for asset_data in version_data.get('assets', []):
+            from .models import CryptoAsset
+            asset = CryptoAsset.from_dict(asset_data)
+            self.bom.assets[asset.id] = asset
         
         self.bom.last_modified = datetime.now().isoformat()
         return True
