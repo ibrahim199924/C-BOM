@@ -4,6 +4,7 @@ Web-based UI for C-BOM (Cryptographic Bill of Materials) using Flask
 
 import json
 import os
+import secrets
 import tempfile
 import webbrowser
 from typing import Optional
@@ -17,16 +18,27 @@ def create_app(bom: Optional[CryptoBOM] = None):
     Use this for production: gunicorn wsgi:app
     """
     try:
-        from flask import Flask, render_template_string, request, jsonify, send_file
+        from flask import Flask, render_template_string, request, jsonify, send_file, session
     except ImportError:
         raise ImportError("Flask not installed. Install with: pip install flask")
 
     app = Flask(__name__)
     app.json.ensure_ascii = True  # prevent surrogate/non-ASCII encode errors
+    # Use SECRET_KEY env var in production; fall back to a random key for local use
+    app.secret_key = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
 
-    # Initialize BOM if none provided
-    if bom is None:
-        bom = CryptoBOM("C-BOM Web Project", "Cryptographic Asset Inventory")
+    # Per-session BOM store: session_id -> CryptoBOM
+    _user_boms: dict = {}
+
+    def get_user_bom() -> CryptoBOM:
+        """Return the BOM for the current browser session, creating one if needed."""
+        sid = session.get('sid')
+        if not sid or sid not in _user_boms:
+            sid = secrets.token_hex(16)
+            session['sid'] = sid
+            session.permanent = False
+            _user_boms[sid] = CryptoBOM("C-BOM Web Project", "Cryptographic Asset Inventory")
+        return _user_boms[sid]
 
     HTML_TEMPLATE = """
     <!DOCTYPE html>
@@ -652,6 +664,7 @@ def create_app(bom: Optional[CryptoBOM] = None):
     
     @app.route('/api/summary')
     def api_summary():
+        bom = get_user_bom()
         summary = bom.get_summary()
         posture = CryptoBOMValidator.get_security_posture(bom)
         return jsonify({
@@ -664,6 +677,7 @@ def create_app(bom: Optional[CryptoBOM] = None):
     
     @app.route('/api/assets')
     def api_assets():
+        bom = get_user_bom()
         return jsonify([{
             'id': asset.id,
             'name': asset.name,
@@ -676,6 +690,7 @@ def create_app(bom: Optional[CryptoBOM] = None):
     @app.route('/api/assets', methods=['POST'])
     def api_add_asset():
         try:
+            bom = get_user_bom()
             data = request.json
             algorithm = data.get('algorithm', '')
             # Auto-detect status unless user explicitly chose deprecated/vulnerable/expired
@@ -700,6 +715,7 @@ def create_app(bom: Optional[CryptoBOM] = None):
     @app.route('/api/assets/<asset_id>', methods=['DELETE'])
     def api_delete_asset(asset_id):
         try:
+            bom = get_user_bom()
             bom.remove_asset(asset_id)
             return jsonify({'success': True})
         except Exception as e:
@@ -707,6 +723,7 @@ def create_app(bom: Optional[CryptoBOM] = None):
     
     @app.route('/api/audit-log')
     def api_audit_log():
+        bom = get_user_bom()
         return jsonify([{
             'timestamp': log.timestamp,
             'action': log.action,
@@ -717,6 +734,7 @@ def create_app(bom: Optional[CryptoBOM] = None):
     @app.route('/api/validate/detail')
     def api_validate_detail():
         from .validator import CryptoValidator
+        bom = get_user_bom()
         asset_results = []
         for asset in bom.assets.values():
             is_valid, errors = CryptoValidator.validate_asset(asset)
@@ -733,6 +751,7 @@ def create_app(bom: Optional[CryptoBOM] = None):
 
     @app.route('/api/chart-data')
     def api_chart_data():
+        bom = get_user_bom()
         risk_counts = {'CRITICAL': 0, 'HIGH': 0, 'MEDIUM': 0, 'LOW': 0}
         type_counts = {}
         for asset in bom.assets.values():
@@ -743,6 +762,7 @@ def create_app(bom: Optional[CryptoBOM] = None):
 
     @app.route('/api/validate')
     def api_validate():
+        bom = get_user_bom()
         is_valid, messages = CryptoBOMValidator.validate_bom(bom)
         return jsonify({
             'valid': is_valid,
@@ -824,13 +844,15 @@ def create_app(bom: Optional[CryptoBOM] = None):
 
     @app.route('/api/export/json')
     def api_export_json():
-        tmp = os.path.join(tempfile.gettempdir(), 'cbom_export.json')
+        bom = get_user_bom()
+        tmp = os.path.join(tempfile.gettempdir(), f'cbom_export_{session["sid"]}.json')
         bom.export_json(tmp)
         return send_file(tmp, as_attachment=True, download_name='cbom_export.json')
     
     @app.route('/api/export/csv')
     def api_export_csv():
-        tmp = os.path.join(tempfile.gettempdir(), 'cbom_export.csv')
+        bom = get_user_bom()
+        tmp = os.path.join(tempfile.gettempdir(), f'cbom_export_{session["sid"]}.csv')
         bom.export_csv(tmp)
         return send_file(tmp, as_attachment=True, download_name='cbom_export.csv')
 
