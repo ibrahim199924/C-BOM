@@ -121,19 +121,22 @@ def main():
         elif sys.argv[1] == '--web':
             port = int(sys.argv[2]) if len(sys.argv) > 2 else 5000
             web_mode(port)
+        elif sys.argv[1] == '--gui':
+            gui_mode()
         elif sys.argv[1] == '--help':
             print("C-BOM - Cryptographic Bill of Materials Management Tool")
             print("\nUsage: python main.py [option]")
             print("\nOptions:")
-            print("  (no option)   - Launch GUI (with CLI/web fallback)")
-            print("  --cli         - Launch CLI mode")
+            print("  (no option)   - Launch web interface in browser (default)")
             print("  --web [port]  - Launch web interface (default port 5000)")
+            print("  --cli         - Launch CLI mode")
+            print("  --gui         - Launch desktop GUI")
             print("  --help        - Show this help message")
         else:
             print(f"Unknown option: {sys.argv[1]}")
             print("Use --help for usage information")
     else:
-        gui_mode()
+        web_mode()
 
 
 if __name__ == "__main__":

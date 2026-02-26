@@ -1,2 +1,6 @@
+flask>=2.0
+werkzeug>=2.0
+gunicorn>=21.0
 pytest>=6.0
 pytest-cov>=2.12.0
+

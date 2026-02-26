@@ -11,5 +11,9 @@
     "enable_audit_logging": true,
     "minimum_supplier_threshold": 100,
     "gui_theme": "default"
+  },
+  "secret_key": "9eaa6b944b874a1dd4a72faf71e1782b3016d8516e947a634baab8db2630738f",
+  "users": {
+    "admin": "scrypt:32768:8:1$0rHZaTikRqcb0J5x$80ebab7ac4829b08e3095bcba053a83022340ad4fa1977289c883150b9c98a7637e0547be3f04c8e487af15625dd88f6f654168af2a00928db1610d975b763b9"
   }
 }

@@ -11,24 +11,23 @@ from .models import CryptoAsset, CryptoBOM
 from .validator import CryptoBOMValidator
 
 
-def create_web_ui(bom: Optional[CryptoBOM] = None, port: int = 5000):
+def create_app(bom: Optional[CryptoBOM] = None):
     """
-    Create a web interface for C-BOM
-    Requires Flask: pip install flask
+    Create and return the Flask application (WSGI factory).
+    Use this for production: gunicorn wsgi:app
     """
     try:
         from flask import Flask, render_template_string, request, jsonify, send_file
     except ImportError:
-        print("Flask not installed. Install with: pip install flask")
-        return
-    
+        raise ImportError("Flask not installed. Install with: pip install flask")
+
     app = Flask(__name__)
     app.json.ensure_ascii = True  # prevent surrogate/non-ASCII encode errors
 
     # Initialize BOM if none provided
     if bom is None:
         bom = CryptoBOM("C-BOM Web Project", "Cryptographic Asset Inventory")
-    
+
     HTML_TEMPLATE = """
     <!DOCTYPE html>
     <html>
@@ -646,6 +645,7 @@ def create_web_ui(bom: Optional[CryptoBOM] = None, port: int = 5000):
     </html>
     """
     
+
     @app.route('/')
     def index():
         return render_template_string(HTML_TEMPLATE)
@@ -833,14 +833,27 @@ def create_web_ui(bom: Optional[CryptoBOM] = None, port: int = 5000):
         tmp = os.path.join(tempfile.gettempdir(), 'cbom_export.csv')
         bom.export_csv(tmp)
         return send_file(tmp, as_attachment=True, download_name='cbom_export.csv')
-    
-    print(f"\n✓ C-BOM Web Interface Starting")
+
+    return app
+
+
+def create_web_ui(bom: Optional[CryptoBOM] = None, port: int = 5000):
+    """Run the web UI locally — creates the app, opens a browser tab, starts the server."""
+    try:
+        app = create_app(bom)
+    except ImportError as e:
+        print(e)
+        return
+
+    port = int(os.environ.get('PORT', port))
+
+    print(f"\n\u2713 C-BOM Web Interface Starting")
     print(f"  Open: http://localhost:{port}")
     print(f"  Press Ctrl+C to stop\n")
-    
+
     try:
         webbrowser.open(f'http://localhost:{port}', new=1)
-    except:
+    except Exception:
         pass
-    
-    app.run(debug=False, port=port, use_reloader=False)
+
+    app.run(debug=False, host='0.0.0.0', port=port, use_reloader=False)

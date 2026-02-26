@@ -10,7 +10,9 @@ import os
 if getattr(sys, "frozen", False):
     bundle_dir = sys._MEIPASS  # type: ignore[attr-defined]
     sys.path.insert(0, bundle_dir)
-    os.chdir(bundle_dir)
+    # Keep cwd as the folder containing the exe so config.json is found there
+    exe_dir = os.path.dirname(sys.executable)
+    os.chdir(exe_dir)
 
 PORT = 5000
 
