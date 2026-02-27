@@ -166,6 +166,29 @@ def create_app(bom: Optional[CryptoBOM] = None):
             .badge-HIGH     { background: #fd7e14 !important; }
             .badge-MEDIUM   { background: #ffc107 !important; color: #333 !important; }
             .badge-LOW      { background: #28a745 !important; }
+            .status-pill {
+                display: inline-block; padding: 3px 9px; border-radius: 10px;
+                font-size: 0.78em; font-weight: 700; text-transform: uppercase; letter-spacing: .4px;
+            }
+            .status-active     { background:#d4edda; color:#155724; }
+            .status-deprecated { background:#fff3cd; color:#856404; }
+            .status-vulnerable { background:#f8d7da; color:#721c24; }
+            .status-expired    { background:#e2e3e5; color:#383d41; }
+            .asset-search {
+                padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px;
+                font-size: 0.88em; width: 220px;
+            }
+            .asset-filter-select {
+                padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px;
+                font-size: 0.88em; background: white; cursor: pointer;
+            }
+            .asset-row-del {
+                background: none; border: 1px solid #dc3545; color: #dc3545;
+                padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 0.82em; font-weight: 600;
+                transition: all .15s;
+            }
+            .asset-row-del:hover { background: #dc3545; color: white; }
+            tr.confirming td { background: #fff3cd !important; }
 
             .algo-warning {
                 display: none;
@@ -259,14 +282,40 @@ def create_app(bom: Optional[CryptoBOM] = None):
             </div>
             
             <div id="assets" class="section">
-                <h2>Cryptographic Assets</h2>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
+                    <h2 style="margin:0;">Cryptographic Assets</h2>
+                    <button class="primary" onclick="showSection('add-asset')" style="font-size:0.88em;padding:8px 16px;">➕ Add Asset</button>
+                </div>
                 <div class="card">
-                    <table>
-                        <thead><tr>
-                            <th>ID</th><th>Name</th><th>Type</th><th>Algorithm</th><th>Risk</th><th>Status</th><th>Actions</th>
-                        </tr></thead>
-                        <tbody id="assetsBody"></tbody>
-                    </table>
+                    <!-- Toolbar -->
+                    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
+                        <input class="asset-search" type="text" id="assetSearch" placeholder="🔍 Search by name or algorithm…" oninput="filterAssets()">
+                        <select class="asset-filter-select" id="typeFilter" onchange="filterAssets()">
+                            <option value="">All Types</option>
+                            <option value="algorithm">Algorithm</option>
+                            <option value="key">Key</option>
+                            <option value="certificate">Certificate</option>
+                            <option value="cipher_suite">Cipher Suite</option>
+                            <option value="library">Library</option>
+                            <option value="protocol">Protocol</option>
+                        </select>
+                        <select class="asset-filter-select" id="riskFilter" onchange="filterAssets()">
+                            <option value="">All Risks</option>
+                            <option value="CRITICAL">Critical</option>
+                            <option value="HIGH">High</option>
+                            <option value="MEDIUM">Medium</option>
+                            <option value="LOW">Low</option>
+                        </select>
+                        <span id="assetCountLabel" style="margin-left:auto;color:#888;font-size:0.85em;"></span>
+                    </div>
+                    <div style="overflow-x:auto;">
+                        <table>
+                            <thead><tr>
+                                <th>Name</th><th>Type</th><th>Algorithm</th><th>Key Length</th><th>Risk</th><th>Status</th><th>Actions</th>
+                            </tr></thead>
+                            <tbody id="assetsBody"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
             
@@ -555,27 +604,55 @@ def create_app(bom: Optional[CryptoBOM] = None):
                 });
             }
 
+            let _allAssets = [];
+            const TYPE_ICON = {algorithm:'#️⃣',key:'🔑',certificate:'📄',cipher_suite:'🌐',library:'📚',protocol:'📡'};
+
             function loadAssets() {
                 fetch('/api/assets').then(r => r.json()).then(data => {
-                    const tbody = document.getElementById('assetsBody');
-                    tbody.innerHTML = '';
-                    if (!data.length) {
-                        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:20px;">No assets added yet.</td></tr>';
-                        return;
-                    }
-                    data.forEach(asset => {
-                        const isWeak = WEAK_ALGOS.some(w => asset.algorithm.toUpperCase().includes(w));
-                        tbody.innerHTML += `<tr>
-                            <td>${asset.id}</td>
-                            <td>${asset.name}</td>
-                            <td>${asset.asset_type}</td>
-                            <td>${asset.algorithm}${isWeak ? ' <span style="color:#dc3545;font-size:0.8em;font-weight:bold;">⚠ Weak</span>' : ''}</td>
-                            <td>${riskBadge(asset.risk_level)}</td>
-                            <td>${asset.status}</td>
-                            <td><button onclick="deleteAsset('${asset.id}')" style="background:#dc3545;color:white;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;">Delete</button></td>
-                        </tr>`;
-                    });
+                    _allAssets = data;
+                    filterAssets();
                 });
+            }
+
+            function filterAssets() {
+                const search = (document.getElementById('assetSearch').value || '').toLowerCase();
+                const typeF  = document.getElementById('typeFilter').value;
+                const riskF  = document.getElementById('riskFilter').value;
+                const tbody  = document.getElementById('assetsBody');
+                const label  = document.getElementById('assetCountLabel');
+                const filtered = _allAssets.filter(a =>
+                    (!search || a.name.toLowerCase().includes(search) || a.algorithm.toLowerCase().includes(search)) &&
+                    (!typeF  || a.asset_type === typeF) &&
+                    (!riskF  || a.risk_level === riskF)
+                );
+                label.textContent = filtered.length + ' of ' + _allAssets.length + ' asset' + (_allAssets.length !== 1 ? 's' : '');
+                if (!_allAssets.length) {
+                    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px;color:#aaa;">
+                        <div style="font-size:2.2em;margin-bottom:8px;">🔐</div>
+                        <div style="font-weight:600;color:#555;margin-bottom:6px;">No assets yet</div>
+                        <button class="primary" style="margin-top:6px;" onclick="showSection('add-asset')">➕ Add Asset</button>
+                    </td></tr>`;
+                    return;
+                }
+                if (!filtered.length) {
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:#999;font-size:0.9em;">No assets match the current filters.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = filtered.map(asset => {
+                    const isWeak = WEAK_ALGOS.some(w => asset.algorithm.toUpperCase().includes(w));
+                    const icon   = TYPE_ICON[asset.asset_type] || '💾';
+                    const kl     = asset.key_length ? asset.key_length + ' bits' : '—';
+                    const stCls  = 'status-' + (asset.status || 'active');
+                    return `<tr>
+                        <td><div style="font-weight:600;">${asset.name}</div><div style="font-size:0.76em;color:#bbb;">${asset.id}</div></td>
+                        <td>${icon} <span style="font-size:0.84em;color:#666;">${asset.asset_type}</span></td>
+                        <td>${asset.algorithm}${isWeak ? ' <span style="color:#dc3545;font-size:0.78em;font-weight:700;">⚠ Weak</span>' : ''}</td>
+                        <td style="font-size:0.86em;color:#555;">${kl}</td>
+                        <td>${riskBadge(asset.risk_level)}</td>
+                        <td><span class="status-pill ${stCls}">${asset.status}</span></td>
+                        <td><button class="asset-row-del" onclick="deleteAsset('${asset.id}', this)">Delete</button></td>
+                    </tr>`;
+                }).join('');
             }
 
             function checkKeyLength() {
@@ -647,10 +724,26 @@ def create_app(bom: Optional[CryptoBOM] = None):
                 });
             }
 
-            function deleteAsset(id) {
-                if (confirm('Delete asset ' + id + '?')) {
-                    fetch('/api/assets/' + id, {method: 'DELETE'}).then(r => r.json()).then(() => loadAssets());
+            function deleteAsset(id, btn) {
+                if (!btn._confirming) {
+                    btn._confirming = true;
+                    btn.textContent = 'Confirm?';
+                    btn.style.background = '#dc3545';
+                    btn.style.color = 'white';
+                    btn.closest('tr').classList.add('confirming');
+                    setTimeout(() => {
+                        if (btn._confirming) {
+                            btn._confirming = false;
+                            btn.textContent = 'Delete';
+                            btn.style.background = '';
+                            btn.style.color = '';
+                            btn.closest('tr').classList.remove('confirming');
+                        }
+                    }, 3000);
+                    return;
                 }
+                btn._confirming = false;
+                fetch('/api/assets/' + id, {method: 'DELETE'}).then(r => r.json()).then(() => loadAssets());
             }
 
             function validateBOM() {
@@ -878,6 +971,7 @@ def create_app(bom: Optional[CryptoBOM] = None):
             'name': asset.name,
             'asset_type': asset.asset_type,
             'algorithm': asset.algorithm,
+            'key_length': asset.key_length,
             'risk_level': asset.risk_level(),
             'status': asset.status
         } for asset in bom.assets.values()])
