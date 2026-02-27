@@ -921,7 +921,7 @@ def create_app(bom: Optional[CryptoBOM] = None):
                             html += `</div>`;
                             html += `<div style="color:#555;padding-left:26px;">${q.note}</div>`;
                             if (q.replacement) {
-                                html += `<div style="padding-left:26px;margin-top:4px;color:#667eea;font-size:0.9em;">\ud83d\udd04 Recommended replacement: <strong>${q.replacement}</strong></div>`;
+                                html += `<div style="padding-left:26px;margin-top:4px;color:#667eea;font-size:0.9em;">&#x1F504; Recommended replacement: <strong>${q.replacement}</strong></div>`;
                             }
                             html += `</div>`;
                         });
