@@ -743,7 +743,7 @@ def create_app(bom: Optional[CryptoBOM] = None):
                     return;
                 }
                 btn._confirming = false;
-                fetch('/api/assets/' + id, {method: 'DELETE'}).then(r => r.json()).then(() => loadAssets());
+                fetch('/api/assets/' + encodeURIComponent(id), {method: 'DELETE'}).then(r => r.json()).then(() => loadAssets());
             }
 
             function validateBOM() {
@@ -1020,8 +1020,12 @@ def create_app(bom: Optional[CryptoBOM] = None):
                 auto_status = CryptoAsset.auto_detect_status(algorithm)
             else:
                 auto_status = user_status
+            raw_id = (data.get('id') or '').strip()
+            if not raw_id:
+                import uuid
+                raw_id = 'asset-' + uuid.uuid4().hex[:8]
             asset = CryptoAsset(
-                id=data['id'],
+                id=raw_id,
                 name=data['name'],
                 asset_type=data['asset_type'],
                 algorithm=algorithm,
