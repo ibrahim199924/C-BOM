@@ -887,6 +887,7 @@ def create_app(bom: Optional[CryptoBOM] = None):
                     if (d.findings && d.findings.length) {
                         html += `<div style="font-size:0.85em;"><strong>Findings</strong><div style="margin-top:6px;">`;
                         d.findings.forEach(f => {
+                            if (f.category === 'Quantum Risk') return; // shown in quantum section below
                             const fc = RISK_COLOR[f.severity] || '#6c757d';
                             const ft = RISK_TEXT[f.severity]  || 'white';
                             html += `<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:5px;">
@@ -894,6 +895,37 @@ def create_app(bom: Optional[CryptoBOM] = None):
                                 <span style="color:#444;"><strong>${f.category}:</strong> ${f.message}</span></div>`;
                         });
                         html += `</div></div>`;
+                    }
+
+                    // ── Quantum Safety Section ────────────────────────────────
+                    if (d.quantum_items && d.quantum_items.length) {
+                        const QC = {CRITICAL:'#dc3545', MEDIUM:'#ffc107', LOW:'#28a745'};
+                        const QT = {CRITICAL:'white',   MEDIUM:'#333',    LOW:'white'};
+                        const qc = QC[d.quantum_color] || '#6c757d';
+                        const qt = QT[d.quantum_color] || 'white';
+                        html += `<div style="margin-top:14px;border-top:1px solid #eee;padding-top:12px;">`;
+                        html += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">`;
+                        html += `<strong style="font-size:0.9em;">\u269b\ufe0f Quantum Safety Assessment</strong>`;
+                        html += `<span style="background:${qc};color:${qt};padding:3px 10px;border-radius:10px;font-size:0.78em;font-weight:700;">${d.quantum_verdict}</span>`;
+                        html += `</div>`;
+                        d.quantum_items.forEach(q => {
+                            const safe = q.safe;
+                            const icon  = safe === true  ? '\u2705' : safe === false ? '\u274c' : '\u26a0\ufe0f';
+                            const color = safe === true  ? '#28a745' : safe === false ? '#dc3545' : '#856404';
+                            const bg    = safe === true  ? '#d4edda' : safe === false ? '#fff0f0' : '#fff9e6';
+                            html += `<div style="background:${bg};border-radius:6px;padding:9px 12px;margin-bottom:6px;font-size:0.83em;">`;
+                            html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">`;
+                            html += `<span>${icon}</span>`;
+                            html += `<strong style="color:${color};">${q.label}</strong>`;
+                            html += `<span style="color:#aaa;font-size:0.88em;">${q.details}</span>`;
+                            html += `</div>`;
+                            html += `<div style="color:#555;padding-left:26px;">${q.note}</div>`;
+                            if (q.replacement) {
+                                html += `<div style="padding-left:26px;margin-top:4px;color:#667eea;font-size:0.9em;">\ud83d\udd04 Recommended replacement: <strong>${q.replacement}</strong></div>`;
+                            }
+                            html += `</div>`;
+                        });
+                        html += `</div>`;
                     }
                     html += `</div>`;
 
@@ -1266,6 +1298,97 @@ def create_app(bom: Optional[CryptoBOM] = None):
                 'key_length': pk_bits, 'expiration_date': expiry_str, 'status': pk_status
             })
 
+        # ── Quantum Safety Assessment ─────────────────────────────────────────
+        # Each entry: {label, safe, reason, replacement}
+        quantum_items = []
+
+        # TLS protocol
+        if tls_ver == 'TLSv1.3':
+            quantum_items.append({
+                'label': 'TLS Protocol',
+                'details': tls_ver,
+                'safe': None,  # protocol itself is not the quantum concern
+                'note': 'TLS 1.3 handshake security depends on the key-exchange algorithm negotiated, not the version itself.',
+                'replacement': None
+            })
+        else:
+            quantum_items.append({
+                'label': 'TLS Protocol',
+                'details': tls_ver,
+                'safe': False,
+                'note': f'{tls_ver} is a legacy protocol with known weaknesses — upgrade to TLS 1.3 first.',
+                'replacement': 'TLS 1.3'
+            })
+
+        # Cipher suite
+        QUANTUM_WEAK_CIPHERS = ['RC4', 'DES', '3DES', 'RC2', 'NULL', 'EXPORT']
+        cipher_upper = cipher_name.upper()
+        if any(c in cipher_upper for c in QUANTUM_WEAK_CIPHERS):
+            quantum_items.append({'label': 'Cipher Suite', 'details': cipher_name, 'safe': False,
+                'note': 'Classically weak cipher — broken even without quantum computers.', 'replacement': 'AES-256-GCM / ChaCha20-Poly1305'})
+        elif 'AES_128' in cipher_upper or 'AES-128' in cipher_upper:
+            quantum_items.append({'label': 'Cipher Suite', 'details': cipher_name, 'safe': False,
+                'note': "AES-128 offers only ~64 bits of security against Grover's quantum search algorithm — below the 128-bit post-quantum threshold.",
+                'replacement': 'AES-256-GCM or ChaCha20-Poly1305 (256-bit)'})
+        elif 'AES_256' in cipher_upper or 'AES-256' in cipher_upper or 'CHACHA20' in cipher_upper:
+            quantum_items.append({'label': 'Cipher Suite', 'details': cipher_name, 'safe': True,
+                'note': "256-bit symmetric cipher — Grover's algorithm halves effective security to 128 bits, which remains secure.",
+                'replacement': None})
+        else:
+            quantum_items.append({'label': 'Cipher Suite', 'details': cipher_name, 'safe': None,
+                'note': 'Could not determine quantum resistance of this cipher suite.',
+                'replacement': 'AES-256-GCM or ChaCha20-Poly1305'})
+
+        # Public key / key exchange
+        PQ_SAFE_TYPES   = {'Ed25519', 'Ed448'}  # still classical but no Shor-vulnerable structure; monitor
+        SHOR_VULNERABLE = {'RSA', 'EC', 'DSA'}
+        if pk_type in SHOR_VULNERABLE:
+            pk_label = f'{pk_type}-{pk_bits}' + (f' ({pk_curve})' if pk_curve else '')
+            if pk_type == 'RSA':
+                repl = 'ML-KEM-768 (CRYSTALS-Kyber, NIST FIPS 203) for key exchange; ML-DSA-65 (Dilithium) for signatures'
+            elif pk_type == 'EC':
+                repl = 'ML-KEM-768 (CRYSTALS-Kyber) for key exchange; ML-DSA-65 (Dilithium) or SLH-DSA for signatures'
+            else:
+                repl = 'ML-DSA-65 (Dilithium, NIST FIPS 204)'
+            quantum_items.append({'label': 'Public Key', 'details': pk_label, 'safe': False,
+                'note': f"{pk_type} security relies on the discrete logarithm / factoring problem — Shor's algorithm solves this in polynomial time on a cryptographically-relevant quantum computer.",
+                'replacement': repl})
+        elif pk_type in PQ_SAFE_TYPES:
+            quantum_items.append({'label': 'Public Key', 'details': pk_type, 'safe': None,
+                'note': f'{pk_type} is not directly vulnerable to Shor\'s algorithm, but no EdDSA variant is NIST-certified post-quantum. Monitor NIST PQC standards.',
+                'replacement': 'ML-DSA-65 (Dilithium) when post-quantum signatures are required'})
+        elif pk_type != 'Unknown':
+            quantum_items.append({'label': 'Public Key', 'details': pk_type, 'safe': None,
+                'note': 'Quantum resistance of this key type is uncertain.',
+                'replacement': 'Evaluate against NIST PQC standards (FIPS 203/204/205)'})
+
+        # Signature hash
+        if sig_algo and sig_algo.lower() not in ('unknown', ''):
+            sl = sig_algo.lower()
+            if 'sha256' in sl or 'sha384' in sl or 'sha512' in sl or 'sha3' in sl:
+                quantum_items.append({'label': 'Signature Hash', 'details': sig_algo.upper(), 'safe': True,
+                    'note': "SHA-256/384/512 have 128+ bit post-quantum security (Grover's algorithm halves preimage resistance). Acceptable.",
+                    'replacement': None})
+            elif 'sha1' in sl:
+                quantum_items.append({'label': 'Signature Hash', 'details': sig_algo.upper(), 'safe': False,
+                    'note': 'SHA-1 is classically broken and offers insufficient quantum resistance.',
+                    'replacement': 'SHA-256 or SHA-384'})
+            elif 'md5' in sl:
+                quantum_items.append({'label': 'Signature Hash', 'details': sig_algo.upper(), 'safe': False,
+                    'note': 'MD5 is classically broken — no quantum resistance at all.',
+                    'replacement': 'SHA-256 or SHA-384'})
+
+        # Overall quantum verdict
+        if any(item['safe'] is False for item in quantum_items):
+            quantum_verdict = 'NOT QUANTUM SAFE'
+            quantum_color   = 'CRITICAL'
+        elif any(item['safe'] is None for item in quantum_items):
+            quantum_verdict = 'PARTIALLY ASSESSED'
+            quantum_color   = 'MEDIUM'
+        else:
+            quantum_verdict = 'QUANTUM SAFE'
+            quantum_color   = 'LOW'
+
         return jsonify({
             'assets': assets,
             'details': {
@@ -1284,8 +1407,11 @@ def create_app(bom: Optional[CryptoBOM] = None):
                 'days_left':   days_left,
                 'sans':        sans[:6],
                 'self_signed': self_signed,
-                'overall_risk': overall_risk,
-                'findings':    findings,
+                'overall_risk':    overall_risk,
+                'findings':        findings,
+                'quantum_items':   quantum_items,
+                'quantum_verdict': quantum_verdict,
+                'quantum_color':   quantum_color,
             }
         })
 
