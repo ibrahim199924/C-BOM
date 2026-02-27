@@ -459,7 +459,7 @@ def create_app(bom: Optional[CryptoBOM] = None):
                   info:{icon:'🔐',title:'RSA-4096 Certificate',security:'STRONG',quantumSafe:false,
                     what:'A certificate using a 4096-bit RSA key. Stronger than RSA-2048 with a larger key, providing better long-term security at the cost of slightly slower handshakes.',
                     uses:'Root CAs, long-lived certificates, enterprise environments',
-                    warn:'Still vulnerable to quantum computers via Shor\'s algorithm.'}},
+                    warn:"Still vulnerable to quantum computers via Shor's algorithm."}},
                 { label:'ECDSA P-256 Certificate', key:'ecdsa256cert',  badge:'RECOMMENDED',bc:'#28a745', bt:'white',
                   fill:{name:'ECDSA P-256 Certificate',type:'certificate',algo:'ECDSA-P256',bits:256,status:'active'},
                   info:{icon:'🔐',title:'ECDSA P-256 Certificate',security:'RECOMMENDED',quantumSafe:false,
@@ -489,7 +489,7 @@ def create_app(bom: Optional[CryptoBOM] = None):
                 { label:'AES-128 Key',   key:'aes128',   badge:'ACCEPTABLE', bc:'#ffc107', bt:'#333',
                   fill:{name:'AES-128 Encryption Key',type:'key',algo:'AES-128-GCM',bits:128,status:'active'},
                   info:{icon:'🔑',title:'AES-128 Key',security:'ACCEPTABLE',quantumSafe:false,
-                    what:'128-bit AES-GCM key. Secure today, but Grover\'s quantum algorithm halves effective security to 64 bits, which is considered marginal for long-term data.',
+                    what:"128-bit AES-GCM key. Secure today, but Grover's quantum algorithm halves effective security to 64 bits, which is considered marginal for long-term data.",
                     uses:'TLS, performance-critical apps, IoT devices with limited memory',
                     warn:'Prefer AES-256 for new deployments or long-lived data.'}},
                 { label:'ChaCha20 Key',  key:'chacha20', badge:'RECOMMENDED',bc:'#28a745', bt:'white',
@@ -501,7 +501,7 @@ def create_app(bom: Optional[CryptoBOM] = None):
                 { label:'HMAC-SHA256',   key:'hmacsha256',badge:'RECOMMENDED',bc:'#28a745', bt:'white',
                   fill:{name:'HMAC-SHA256 Key',type:'key',algo:'HMAC-SHA256',bits:256,status:'active'},
                   info:{icon:'🔑',title:'HMAC-SHA256',security:'RECOMMENDED',quantumSafe:true,
-                    what:'Keyed-Hash Message Authentication Code using SHA-256. Verifies both the integrity (the data wasn\'t changed) and authenticity (sent by a trusted party) of a message.',
+                    what:"Keyed-Hash Message Authentication Code using SHA-256. Verifies both the integrity (the data wasn't changed) and authenticity (sent by a trusted party) of a message.",
                     uses:'API authentication tokens, JWTs, webhook signatures, cookie MAC',
                     warn:null}},
               ]},
@@ -555,7 +555,7 @@ def create_app(bom: Optional[CryptoBOM] = None):
                 { label:'SHA-256',  key:'sha256',   badge:'RECOMMENDED',bc:'#28a745',bt:'white',
                   fill:{name:'SHA-256 Hash',type:'algorithm',algo:'SHA-256',bits:256,status:'active'},
                   info:{icon:'#️⃣',title:'SHA-256',security:'RECOMMENDED',quantumSafe:true,
-                    what:'256-bit hash from the SHA-2 family (NIST). Produces a fixed-size fingerprint of any data. Collision-resistant — it\'s computationally infeasible to find two inputs with the same hash.',
+                    what:"256-bit hash from the SHA-2 family (NIST). Produces a fixed-size fingerprint of any data. Collision-resistant — it's computationally infeasible to find two inputs with the same hash.",
                     uses:'Code signing, certificate fingerprints, Bitcoin, file integrity, git commits',
                     warn:null}},
                 { label:'SHA-512',  key:'sha512',   badge:'RECOMMENDED',bc:'#28a745',bt:'white',
@@ -951,7 +951,7 @@ def create_app(bom: Optional[CryptoBOM] = None):
                     + '<div style="margin-bottom:8px;">'
                     + '<span style="color:#aaa;font-size:0.76em;text-transform:uppercase;letter-spacing:.6px;">Quantum Safe</span><br>'
                     + '<span style="font-weight:600;color:' + (info.quantumSafe?'#28a745':'#dc3545') + ';">'
-                    + (info.quantumSafe ? '✓ Yes — quantum-resistant at 256+ bits' : '✗ No — vulnerable to Shor\'s / Grover\'s algorithm')
+                    + (info.quantumSafe ? '✓ Yes — quantum-resistant at 256+ bits' : "✗ No — vulnerable to Shor's / Grover's algorithm")
                     + '</span></div>'
                     + '<div style="margin-bottom:' + (info.warn?'8':'0') + 'px;">'
                     + '<span style="color:#aaa;font-size:0.76em;text-transform:uppercase;letter-spacing:.6px;">Use Cases</span><br>'
