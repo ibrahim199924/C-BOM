@@ -253,7 +253,7 @@ def create_app(bom: Optional[CryptoBOM] = None):
                         <span id="scanPanelArrow" style="font-size:0.85em;color:#667eea;">&#9660; expand</span>
                     </div>
                     <div id="scanPanel" style="display:none;margin-top:14px;">
-                        <p style="color:#666;font-size:0.9em;margin-bottom:10px;">Enter a hostname — the scanner will read its TLS version and certificate and pre-fill two assets below.</p>
+                        <p style="color:#666;font-size:0.9em;margin-bottom:10px;">Enter a hostname — the scanner will analyse TLS version, cipher suite, public key type &amp; strength, certificate validity, signature algorithm, and quantum risk, then pre-fill assets below.</p>
                         <div style="display:flex;gap:10px;align-items:flex-end;">
                             <div style="flex:1;">
                                 <label>Hostname or URL</label>
@@ -616,16 +616,79 @@ def create_app(bom: Optional[CryptoBOM] = None):
                         e.style.display = 'block';
                         return;
                     }
-                    let html = '<p style="margin-bottom:8px;font-size:0.9em;color:#555;">Found <strong>' + data.assets.length + '</strong> asset(s). Click one to pre-fill the form below:</p>';
-                    data.assets.forEach((a,i) => {
-                        const risk = ['MD5','SHA-1','SHA1','DES','RC4','3DES','SSLv2','SSLv3','TLSv1','TLSv1.1'].some(w => a.algorithm.toUpperCase().includes(w.toUpperCase())) ? '#fd7e14' : '#28a745';
-                        html += `<div onclick="prefillAsset(${i})" style="cursor:pointer;padding:10px 14px;border:1px solid #ddd;border-radius:6px;margin-bottom:8px;background:#f9f9f9;transition:background 0.2s;" onmouseover="this.style.background='#eef2ff'" onmouseout="this.style.background='#f9f9f9'">`
-                            + `<span style="font-weight:600;">${a.name}</span> &nbsp;<span style="font-size:0.8em;color:#777;">${a.asset_type}</span><br>`
-                            + `<span style="font-size:0.85em;">Algorithm: <strong>${a.algorithm}</strong>`
-                            + (a.key_length ? ` &nbsp; Key bits: <strong>${a.key_length}</strong>` : '')
-                            + (a.expiration_date ? ` &nbsp; Expires: <strong>${a.expiration_date}</strong>` : '')
+                    const d = data.details || {};
+                    const RISK_COLOR = {CRITICAL:'#dc3545',HIGH:'#fd7e14',MEDIUM:'#ffc107',LOW:'#28a745'};
+                    const RISK_TEXT  = {CRITICAL:'white',    HIGH:'white',    MEDIUM:'#333',   LOW:'white'};
+                    const rc = RISK_COLOR[d.overall_risk] || '#6c757d';
+                    const rt = RISK_TEXT[d.overall_risk]  || 'white';
+
+                    // ── Report card ──────────────────────────────────────────
+                    let html = `<div style="border:2px solid ${rc};border-radius:8px;padding:16px;margin-bottom:14px;">`;
+
+                    // Header row
+                    html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">`;
+                    html += `<strong style="font-size:1em;">🔍 Scan Report: ${d.hostname || ''}</strong>`;
+                    html += `<span style="background:${rc};color:${rt};padding:4px 12px;border-radius:12px;font-size:0.82em;font-weight:600;">${d.overall_risk || 'UNKNOWN'} RISK</span>`;
+                    html += `</div>`;
+
+                    // Summary grid
+                    html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:12px;">`;
+                    const cells = [
+                        ['Protocol',    d.tls_version || '—'],
+                        ['Cipher Suite', d.cipher ? (d.cipher.length>28 ? d.cipher.substring(0,26)+'…' : d.cipher) : '—'],
+                        ['Public Key',   d.pk_type && d.pk_type !== 'Unknown'
+                            ? d.pk_type + (d.pk_curve ? ' ('+d.pk_curve+')' : '') + (d.pk_bits ? ', '+d.pk_bits+' bit' : '')
+                            : '—'],
+                        ['Cert Expires', d.expiry || '—'],
+                        ['Days Left',    d.days_left !== null && d.days_left !== undefined
+                            ? (d.days_left < 0 ? '⚠ EXPIRED' : d.days_left + ' days')
+                            : '—'],
+                        ['Issuer',       d.issuer_org || d.issuer_cn || '—'],
+                    ];
+                    cells.forEach(([label, val]) => {
+                        const expired = label === 'Days Left' && d.days_left !== null && d.days_left < 30;
+                        html += `<div style="background:#f8f9fa;border-radius:6px;padding:8px 10px;">
+                            <div style="font-size:0.75em;color:#888;text-transform:uppercase;letter-spacing:.5px;">${label}</div>
+                            <div style="font-size:0.88em;font-weight:600;color:${expired?'#dc3545':'#333'};margin-top:2px;">${val}</div></div>`;
+                    });
+                    html += `</div>`;
+
+                    // SANs
+                    if (d.sans && d.sans.length) {
+                        html += `<div style="font-size:0.82em;color:#555;margin-bottom:10px;">
+                            <strong>Subject Alt Names:</strong> ${d.sans.join(', ')}${d.sans.length >= 6 ? ' …' : ''}</div>`;
+                    }
+
+                    // Findings list
+                    if (d.findings && d.findings.length) {
+                        html += `<div style="font-size:0.85em;"><strong>Findings</strong><div style="margin-top:6px;">`;
+                        d.findings.forEach(f => {
+                            const fc = RISK_COLOR[f.severity] || '#6c757d';
+                            const ft = RISK_TEXT[f.severity]  || 'white';
+                            html += `<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:5px;">
+                                <span style="background:${fc};color:${ft};padding:2px 7px;border-radius:10px;font-size:0.78em;white-space:nowrap;flex-shrink:0;">${f.severity}</span>
+                                <span style="color:#444;"><strong>${f.category}:</strong> ${f.message}</span></div>`;
+                        });
+                        html += `</div></div>`;
+                    }
+                    html += `</div>`;
+
+                    // Asset cards for pre-fill
+                    html += `<p style="margin-bottom:8px;font-size:0.9em;color:#555;">Click an asset to pre-fill the form below:</p>`;
+                    data.assets.forEach((a, i) => {
+                        const statusColors = {deprecated:'#fd7e14',vulnerable:'#dc3545',expired:'#dc3545',active:'#28a745'};
+                        const sc = statusColors[a.status] || '#6c757d';
+                        html += `<div onclick="prefillAsset(${i})" style="cursor:pointer;padding:10px 14px;border:1px solid #ddd;border-radius:6px;margin-bottom:8px;background:#f9f9f9;" onmouseover="this.style.background='#eef2ff'" onmouseout="this.style.background='#f9f9f9'">
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <span style="font-weight:600;">${a.name}</span>
+                                <span style="background:${sc};color:white;padding:2px 8px;border-radius:10px;font-size:0.75em;">${a.status}</span>
+                            </div>
+                            <span style="font-size:0.82em;color:#777;">${a.asset_type} &nbsp;·&nbsp; Algorithm: <strong>${a.algorithm}</strong>`
+                            + (a.key_length ? ` &nbsp;·&nbsp; ${a.key_length} bits` : '')
+                            + (a.expiration_date ? ` &nbsp;·&nbsp; Expires ${a.expiration_date}` : '')
                             + `</span></div>`;
                     });
+
                     const wrap = document.getElementById('wsScanAssets');
                     wrap.innerHTML = html;
                     wrap.style.display = 'block';
@@ -793,24 +856,12 @@ def create_app(bom: Optional[CryptoBOM] = None):
             ctx = ssl.create_default_context()
             with socket.create_connection((hostname, port), timeout=10) as raw_sock:
                 with ctx.wrap_socket(raw_sock, server_hostname=hostname) as ssock:
-                    tls_ver  = ssock.version() or 'Unknown'
-                    cipher   = ssock.cipher()
-                    bits     = cipher[2] if cipher else 0
-                    cert     = ssock.getpeercert()
-                    def _rdn(seq):
-                        out = {}
-                        for rdn in seq:
-                            for k, v in rdn:
-                                out[k] = v.encode('ascii', 'replace').decode('ascii')
-                        return out
-                    subject  = _rdn(cert.get('subject',  ()))
-                    expiry_str = ''
-                    not_after  = cert.get('notAfter', '')
-                    try:
-                        expiry_dt  = datetime.datetime.strptime(not_after, '%b %d %H:%M:%S %Y %Z')
-                        expiry_str = expiry_dt.strftime('%Y-%m-%d')
-                    except Exception:
-                        pass
+                    tls_ver     = ssock.version() or 'Unknown'
+                    cipher      = ssock.cipher()
+                    cipher_name = cipher[0] if cipher else 'Unknown'
+                    bits        = cipher[2] if cipher else 0
+                    cert_dict   = ssock.getpeercert()
+                    cert_der    = ssock.getpeercert(binary_form=True)
         except ssl.SSLError as exc:
             return jsonify({'error': f'TLS error: {exc}'})
         except OSError as exc:
@@ -818,29 +869,199 @@ def create_app(bom: Optional[CryptoBOM] = None):
         except Exception as exc:
             return jsonify({'error': str(exc)})
 
-        safe = hostname.replace('.', '-').replace('*', 'WILD').upper()
+        def _rdn(seq):
+            out = {}
+            for rdn in seq:
+                for k, v in rdn:
+                    out[k] = v.encode('ascii', 'replace').decode('ascii')
+            return out
+
+        subject = _rdn(cert_dict.get('subject', ()))
+        issuer  = _rdn(cert_dict.get('issuer',  ()))
+
+        not_after  = cert_dict.get('notAfter', '')
+        expiry_str = ''
+        days_left  = None
+        try:
+            expiry_dt  = datetime.datetime.strptime(not_after, '%b %d %H:%M:%S %Y %Z')
+            expiry_str = expiry_dt.strftime('%Y-%m-%d')
+            days_left  = (expiry_dt - datetime.datetime.utcnow()).days
+        except Exception:
+            pass
+
+        sans = [v for k, v in cert_dict.get('subjectAltName', ()) if k == 'DNS']
+        self_signed = (
+            subject.get('commonName') == issuer.get('commonName') and
+            subject.get('organizationName', '__a') == issuer.get('organizationName', '__b')
+        )
+
+        # ── Deep public-key analysis via `cryptography` library ──────────────
+        pk_type  = 'Unknown'
+        pk_bits  = 0
+        pk_curve = ''
+        sig_algo = ''
+        try:
+            from cryptography import x509
+            from cryptography.hazmat.primitives.asymmetric import rsa, ec, dsa, ed25519, ed448
+            cert_obj = x509.load_der_x509_certificate(cert_der)
+            pub_key  = cert_obj.public_key()
+            try:
+                sig_algo = cert_obj.signature_hash_algorithm.name
+            except Exception:
+                sig_algo = 'Unknown'
+            if isinstance(pub_key, rsa.RSAPublicKey):
+                pk_type = 'RSA';  pk_bits = pub_key.key_size
+            elif isinstance(pub_key, ec.EllipticCurvePublicKey):
+                pk_type = 'EC';   pk_bits = pub_key.key_size;  pk_curve = pub_key.curve.name
+            elif isinstance(pub_key, dsa.DSAPublicKey):
+                pk_type = 'DSA';  pk_bits = pub_key.key_size
+            elif isinstance(pub_key, ed25519.Ed25519PublicKey):
+                pk_type = 'Ed25519'; pk_bits = 256
+            elif isinstance(pub_key, ed448.Ed448PublicKey):
+                pk_type = 'Ed448';   pk_bits = 448
+        except ImportError:
+            pass
+        except Exception:
+            pass
+
+        # ── Risk findings engine ──────────────────────────────────────────────
+        findings     = []
+        overall_risk = 'LOW'
+        SEVERITY_ORDER = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']
+
+        def _bump(current, new):
+            return new if SEVERITY_ORDER.index(new) > SEVERITY_ORDER.index(current) else current
+
+        def _finding(severity, category, message):
+            findings.append({'severity': severity, 'category': category, 'message': message})
+            nonlocal overall_risk
+            overall_risk = _bump(overall_risk, severity)
+
+        # Protocol version
+        TLS_RISKS = {
+            'SSLv2':   ('CRITICAL', 'SSLv2 is completely broken — disable immediately.'),
+            'SSLv3':   ('CRITICAL', 'SSLv3 is broken (POODLE). Must be disabled.'),
+            'TLSv1':   ('HIGH',     'TLS 1.0 is deprecated (RFC 8996). Upgrade to TLS 1.2+.'),
+            'TLSv1.1': ('HIGH',     'TLS 1.1 is deprecated (RFC 8996). Upgrade to TLS 1.2+.'),
+            'TLSv1.2': ('MEDIUM',   'TLS 1.2 is acceptable but TLS 1.3 is strongly preferred.'),
+            'TLSv1.3': ('LOW',      'TLS 1.3 — current best practice.'),
+        }
+        if tls_ver in TLS_RISKS:
+            _finding(*TLS_RISKS[tls_ver][0:1] + ('Protocol',) + TLS_RISKS[tls_ver][1:2])
+
+        # Cipher suite
+        for wc in ['RC4', 'DES', '3DES', 'NULL', 'EXPORT', 'ANON']:
+            if wc in cipher_name.upper():
+                _finding('CRITICAL', 'Cipher Suite', f'Weak/broken cipher in use: {cipher_name}')
+                break
+        if 'MD5' in cipher_name.upper():
+            _finding('HIGH', 'Cipher Suite', f'MD5-based cipher in use: {cipher_name}')
+
+        # Public key
+        if pk_type == 'RSA':
+            if pk_bits < 2048:
+                _finding('CRITICAL', 'Public Key', f'RSA-{pk_bits} is critically weak — NIST minimum is 2048 bits. Replace immediately.')
+            elif pk_bits < 3072:
+                _finding('MEDIUM', 'Public Key', f'RSA-{pk_bits} is acceptable until ~2030. Consider RSA-4096 or ECDSA P-256 for longevity.')
+            else:
+                _finding('LOW', 'Public Key', f'RSA-{pk_bits} meets current best practices.')
+            _finding('MEDIUM', 'Quantum Risk', "RSA is vulnerable to Shor's algorithm on quantum computers. Plan migration to post-quantum algorithms (e.g. ML-KEM / CRYSTALS-Kyber).")
+        elif pk_type == 'EC':
+            weak_curves = {'secp192r1', 'prime192v1', 'secp192k1', 'sect163r2', 'secp112r1'}
+            if pk_curve in weak_curves:
+                _finding('HIGH', 'Public Key', f'EC curve {pk_curve} is deprecated. Replace with P-256, P-384, or P-521.')
+            elif pk_bits < 256:
+                _finding('HIGH', 'Public Key', f'EC key is only {pk_bits} bits. Minimum recommended is 256 bits.')
+            else:
+                label = f'{pk_curve}, {pk_bits}-bit' if pk_curve else f'{pk_bits}-bit'
+                _finding('LOW', 'Public Key', f'EC key ({label}) meets current best practices.')
+            _finding('MEDIUM', 'Quantum Risk', "ECC is vulnerable to Shor's algorithm. Plan migration to post-quantum algorithms.")
+        elif pk_type == 'DSA':
+            _finding('HIGH', 'Public Key', 'DSA is deprecated and should be replaced with ECDSA or Ed25519.')
+            _finding('MEDIUM', 'Quantum Risk', "DSA is vulnerable to Shor's algorithm. Migrate to post-quantum algorithms.")
+        elif pk_type in ('Ed25519', 'Ed448'):
+            _finding('LOW', 'Public Key', f'{pk_type} is a modern, efficient algorithm — excellent choice.')
+            _finding('MEDIUM', 'Quantum Risk', f'{pk_type} is still vulnerable to quantum attacks. Monitor post-quantum standards.')
+        elif pk_type == 'Unknown':
+            _finding('MEDIUM', 'Public Key', 'Could not analyse public key type — install the cryptography library for full analysis.')
+
+        # Signature algorithm
+        if sig_algo and sig_algo != 'Unknown':
+            sl = sig_algo.lower()
+            if 'md5' in sl:
+                _finding('CRITICAL', 'Signature', f'Certificate signed with MD5 — cryptographically broken.')
+            elif 'sha1' in sl:
+                _finding('HIGH', 'Signature', f'Certificate signed with SHA-1 — deprecated since 2017.')
+            else:
+                _finding('LOW', 'Signature', f'Signature algorithm: {sig_algo.upper()} — acceptable.')
+
+        # Certificate expiry
+        if days_left is not None:
+            if days_left < 0:
+                _finding('CRITICAL', 'Expiry', f'Certificate EXPIRED {abs(days_left)} day(s) ago!')
+            elif days_left < 14:
+                _finding('CRITICAL', 'Expiry', f'Certificate expires in {days_left} day(s) — renew IMMEDIATELY.')
+            elif days_left < 30:
+                _finding('HIGH', 'Expiry', f'Certificate expires in {days_left} days — renew soon.')
+            elif days_left < 90:
+                _finding('MEDIUM', 'Expiry', f'Certificate expires in {days_left} days — schedule renewal.')
+            else:
+                _finding('LOW', 'Expiry', f'Certificate valid for {days_left} more days.')
+
+        # Self-signed
+        if self_signed:
+            _finding('HIGH', 'Trust', 'Certificate appears self-signed — not trusted by browsers/clients by default.')
+
+        # ── Build BOM assets ──────────────────────────────────────────────────
+        safe       = hostname.replace('.', '-').replace('*', 'WILD').upper()
         tls_status = CryptoAsset.auto_detect_status(tls_ver)
+
+        pk_algo_str = f'{pk_type}-{pk_bits}' if pk_type not in ('Unknown', 'Ed25519', 'Ed448') else pk_type
+        pk_status   = CryptoAsset.auto_detect_status(pk_algo_str) if pk_type != 'Unknown' else 'active'
+        if pk_type == 'DSA':
+            pk_status = 'deprecated'
+
         assets = [
             {
-                'id':              f'TLS-{safe}',
-                'name':            f'TLS on {hostname}',
-                'asset_type':      'cipher_suite',
-                'algorithm':       tls_ver,
-                'key_length':      bits,
-                'expiration_date': '',
-                'status':          tls_status
+                'id': f'TLS-{safe}', 'name': f'TLS Session on {hostname}',
+                'asset_type': 'cipher_suite', 'algorithm': tls_ver,
+                'key_length': bits, 'expiration_date': '', 'status': tls_status
             },
             {
-                'id':              f'CERT-{safe}',
-                'name':            f'Certificate for {hostname}',
-                'asset_type':      'certificate',
-                'algorithm':       'X.509',
-                'key_length':      0,
-                'expiration_date': expiry_str,
-                'status':          'active'
-            }
+                'id': f'CERT-{safe}', 'name': f'Certificate for {hostname}',
+                'asset_type': 'certificate', 'algorithm': 'X.509',
+                'key_length': 0, 'expiration_date': expiry_str, 'status': 'active'
+            },
         ]
-        return jsonify({'assets': assets})
+        if pk_type != 'Unknown':
+            assets.append({
+                'id': f'PK-{safe}', 'name': f'Public Key on {hostname}',
+                'asset_type': 'key', 'algorithm': pk_algo_str,
+                'key_length': pk_bits, 'expiration_date': expiry_str, 'status': pk_status
+            })
+
+        return jsonify({
+            'assets': assets,
+            'details': {
+                'hostname':    hostname,
+                'tls_version': tls_ver,
+                'cipher':      cipher_name,
+                'cipher_bits': bits,
+                'pk_type':     pk_type,
+                'pk_bits':     pk_bits,
+                'pk_curve':    pk_curve,
+                'sig_algo':    sig_algo,
+                'subject_cn':  subject.get('commonName', hostname),
+                'issuer_cn':   issuer.get('commonName', ''),
+                'issuer_org':  issuer.get('organizationName', ''),
+                'expiry':      expiry_str,
+                'days_left':   days_left,
+                'sans':        sans[:6],
+                'self_signed': self_signed,
+                'overall_risk': overall_risk,
+                'findings':    findings,
+            }
+        })
 
     @app.route('/api/export/json')
     def api_export_json():
