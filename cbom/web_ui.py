@@ -195,6 +195,20 @@ def create_app(bom: Optional[CryptoBOM] = None):
                 margin-top: 15px;
                 font-weight: 600;
             }
+            .summary-box .icon { font-size: 1.5em; margin-bottom: 6px; display: block; }
+            .summary-box .delta { font-size: 0.75em; opacity: 0.75; margin-top: 3px; }
+            .quantum-banner {
+                background: linear-gradient(135deg,#5a32a3,#764ba2);
+                color: white; padding: 12px 18px; border-radius: 8px;
+                margin-bottom: 4px; font-size: 0.88em;
+                display: flex; align-items: center; gap: 10px;
+            }
+            .dash-refresh-btn {
+                background: white; border: 1px solid #ddd; border-radius: 6px;
+                padding: 6px 14px; cursor: pointer; color: #667eea;
+                font-size: 0.86em; font-weight: 600;
+            }
+            .dash-refresh-btn:hover { background: #f0f4ff; }
 
         </style>
         <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -215,9 +229,13 @@ def create_app(bom: Optional[CryptoBOM] = None):
             </div>
             
             <div id="dashboard" class="section active">
-                <h2>Security Dashboard</h2>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                    <h2 style="margin:0;">Security Dashboard</h2>
+                    <button class="dash-refresh-btn" onclick="loadDashboard()">🔄 Refresh</button>
+                </div>
+                <div id="quantumBanner" style="display:none;"></div>
                 <div id="summary" class="summary-grid"></div>
-                <div class="chart-grid">
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin:20px 0;">
                     <div class="chart-box">
                         <h3>Risk Distribution</h3>
                         <canvas id="riskChart" height="220"></canvas>
@@ -226,9 +244,16 @@ def create_app(bom: Optional[CryptoBOM] = None):
                         <h3>Asset Types</h3>
                         <canvas id="typeChart" height="220"></canvas>
                     </div>
+                    <div class="chart-box">
+                        <h3>⚠️ Top Issues</h3>
+                        <div id="topIssuesList" style="margin-top:8px;"></div>
+                    </div>
                 </div>
                 <div class="card">
-                    <h3>Audit Log</h3>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                        <h3 style="margin:0;">Recent Activity</h3>
+                        <span id="auditCount" style="color:#aaa;font-size:0.82em;"></span>
+                    </div>
                     <div id="audit-log"></div>
                 </div>
             </div>
@@ -386,22 +411,43 @@ def create_app(bom: Optional[CryptoBOM] = None):
                         : data.security_score >= 60
                         ? 'linear-gradient(135deg,#ffc107,#fd7e14)'
                         : 'linear-gradient(135deg,#dc3545,#c82333)';
+                    const scoreLabel = data.security_score >= 80 ? 'Strong' : data.security_score >= 60 ? 'Moderate' : 'Weak';
+                    if (!data.total_assets) {
+                        document.getElementById('summary').innerHTML = `
+                            <div style="grid-column:1/-1;text-align:center;padding:36px 20px;color:#aaa;">
+                                <div style="font-size:2.8em;margin-bottom:10px;">🔐</div>
+                                <div style="font-size:1.1em;font-weight:600;margin-bottom:6px;color:#555;">No cryptographic assets yet</div>
+                                <div style="font-size:0.88em;margin-bottom:16px;">Start by adding your first asset to begin tracking your cryptographic posture.</div>
+                                <button class="primary" onclick="showSection('add-asset')">➕ Add your first asset</button>
+                            </div>`;
+                        return;
+                    }
                     document.getElementById('summary').innerHTML = `
                         <div class="summary-box">
+                            <div class="icon">📦</div>
                             <div class="number">${data.total_assets}</div>
                             <div class="label">Total Assets</div>
                         </div>
                         <div class="summary-box" style="background:${scoreColor}">
+                            <div class="icon">🛡️</div>
                             <div class="number">${data.security_score}/100</div>
                             <div class="label">Security Score</div>
+                            <div class="delta">${scoreLabel}</div>
                         </div>
                         <div class="summary-box" style="background:linear-gradient(135deg,#dc3545,#c82333)">
+                            <div class="icon">🔴</div>
                             <div class="number">${data.critical_risk}</div>
                             <div class="label">Critical Risk</div>
                         </div>
                         <div class="summary-box" style="background:linear-gradient(135deg,#fd7e14,#e8590c)">
+                            <div class="icon">⚠️</div>
                             <div class="number">${data.vulnerable_assets}</div>
                             <div class="label">Vulnerable</div>
+                        </div>
+                        <div class="summary-box" style="background:linear-gradient(135deg,#6c757d,#495057)">
+                            <div class="icon">📅</div>
+                            <div class="number">${data.expired_assets}</div>
+                            <div class="label">Expired</div>
                         </div>`;
                 });
                 fetch('/api/chart-data').then(r => r.json()).then(data => {
@@ -409,16 +455,69 @@ def create_app(bom: Optional[CryptoBOM] = None):
                     renderTypeChart(data.asset_types);
                 });
                 fetch('/api/audit-log').then(r => r.json()).then(logs => {
-                    let html = '<ul style="list-style:none;">';
-                    if (!logs.length) html += '<li style="padding:10px;color:#999;">No activity yet.</li>';
-                    logs.forEach(log => {
-                        html += `<li style="padding:10px;border-bottom:1px solid #ecf0f1;">
-                            <strong>${log.asset_name}</strong> — ${log.action}
-                            <span style="float:right;color:#999;font-size:0.8em;">${log.timestamp.split('T')[0]}</span>
-                        </li>`;
-                    });
-                    html += '</ul>';
-                    document.getElementById('audit-log').innerHTML = html;
+                    const auditEl = document.getElementById('audit-log');
+                    const countEl = document.getElementById('auditCount');
+                    if (!logs.length) {
+                        auditEl.innerHTML = '<div style="text-align:center;padding:20px;color:#aaa;font-size:0.9em;">No activity yet. Add an asset to get started.</div>';
+                        if (countEl) countEl.textContent = '';
+                        return;
+                    }
+                    if (countEl) countEl.textContent = 'Last ' + logs.length + ' entries';
+                    const actionIcon = a => a.includes('add') ? '➕' : (a.includes('delet') || a.includes('remov')) ? '🗑️' : a.includes('updat') ? '✏️' : '📝';
+                    const actionBg = a => a.includes('add') ? '#28a74522' : (a.includes('delet') || a.includes('remov')) ? '#dc354522' : '#667eea22';
+                    const formatTime = ts => {
+                        try {
+                            const d = new Date(ts);
+                            const diff = Math.floor((new Date() - d) / 86400000);
+                            if (diff === 0) return 'Today ' + d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+                            if (diff === 1) return 'Yesterday';
+                            if (diff < 7) return diff + ' days ago';
+                            return d.toLocaleDateString();
+                        } catch(e) { return ts.split('T')[0]; }
+                    };
+                    auditEl.innerHTML = logs.map(log => {
+                        const ic = actionIcon(log.action.toLowerCase());
+                        const bg = actionBg(log.action.toLowerCase());
+                        return `<div style="padding:10px 0;border-bottom:1px solid #f5f5f5;display:flex;align-items:center;gap:12px;">
+                            <div style="width:30px;height:30px;border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:0.85em;">${ic}</div>
+                            <div style="flex:1;">
+                                <span style="font-weight:600;color:#333;">${log.asset_name}</span>
+                                <span style="color:#777;margin-left:6px;font-size:0.9em;">${log.action}</span>
+                            </div>
+                            <span style="color:#aaa;font-size:0.78em;white-space:nowrap;">${formatTime(log.timestamp)}</span>
+                        </div>`;
+                    }).join('');
+                });
+                fetch('/api/assets').then(r => r.json()).then(assets => {
+                    // Top Issues panel
+                    const RISK_COLOR = {CRITICAL:'#dc3545',HIGH:'#fd7e14',MEDIUM:'#ffc107',LOW:'#28a745'};
+                    const issues = assets.filter(a => a.risk_level === 'CRITICAL' || a.risk_level === 'HIGH');
+                    const issEl = document.getElementById('topIssuesList');
+                    if (!issues.length) {
+                        issEl.innerHTML = '<div style="color:#28a745;text-align:center;padding:24px 10px;font-size:0.88em;">✓ No critical or high-risk assets</div>';
+                    } else {
+                        issEl.innerHTML = issues.slice(0, 6).map(a =>
+                            `<div style="padding:8px 0;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                                <div style="min-width:0;">
+                                    <div style="font-weight:600;color:#333;font-size:0.86em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.name}</div>
+                                    <div style="color:#999;font-size:0.78em;">${a.algorithm}</div>
+                                </div>
+                                <span style="background:${RISK_COLOR[a.risk_level]};color:white;padding:2px 7px;border-radius:8px;font-size:0.72em;font-weight:700;flex-shrink:0;">${a.risk_level}</span>
+                            </div>`
+                        ).join('');
+                        if (issues.length > 6) issEl.innerHTML += `<div style="text-align:center;padding:8px;color:#888;font-size:0.8em;">+${issues.length - 6} more</div>`;
+                    }
+                    // Quantum vulnerability banner
+                    const QUANTUM_UNSAFE = ['RSA','DSA','ECDSA','ECDH','DH'];
+                    const qCount = assets.filter(a => QUANTUM_UNSAFE.some(q => a.algorithm.toUpperCase().includes(q))).length;
+                    const banner = document.getElementById('quantumBanner');
+                    if (qCount > 0) {
+                        banner.style.display = 'flex';
+                        banner.className = 'quantum-banner';
+                        banner.innerHTML = '<span style="font-size:1.3em;">⚛️</span><span><strong>' + qCount + ' asset' + (qCount > 1 ? 's' : '') + '</strong> use algorithms vulnerable to quantum computers (RSA/ECDSA/ECDH). Consider planning a post-quantum migration.</span>';
+                    } else {
+                        banner.style.display = 'none';
+                    }
                 });
             }
 
