@@ -249,6 +249,7 @@ def create_app(bom: Optional[CryptoBOM] = None):
                 <button class="nav-btn" onclick="showSection('add-asset')">➕ Add</button>
                 <button class="nav-btn" onclick="showSection('validate')">✓ Validate</button>
                 <button class="nav-btn" onclick="showSection('export')">💾 Export</button>
+                <button class="nav-btn" onclick="showSection('scan-repo')">🔍 Scan Repo</button>
             </div>
             
             <div id="dashboard" class="section active">
@@ -434,6 +435,30 @@ def create_app(bom: Optional[CryptoBOM] = None):
                     <button class="primary" onclick="exportJSON()" style="margin-right: 10px;">JSON</button>
                     <button class="primary" onclick="exportCSV()">CSV</button>
                 </div>
+            </div>
+
+            <div id="scan-repo" class="section">
+                <h2>🔍 Repository Code Scanner</h2>
+                <div class="card" style="margin-bottom:16px;">
+                    <p style="color:#666;font-size:0.9em;margin-bottom:14px;">Scan a public GitHub repository for cryptographic vulnerabilities — weak algorithms, disabled TLS validation, hardcoded secrets, insecure random, and more.</p>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:end;">
+                        <div class="form-group" style="margin:0;">
+                            <label>GitHub Repository</label>
+                            <input type="text" id="repoInput" placeholder="owner/repo or https://github.com/owner/repo" onkeydown="if(event.key==='Enter'){event.preventDefault();scanRepo();}">
+                        </div>
+                        <div class="form-group" style="margin:0;">
+                            <label>Token <span style="color:#999;font-weight:normal;">(optional — raises rate limit to 5000 req/hr)</span></label>
+                            <input type="password" id="repoToken" placeholder="ghp_... (optional, for private repos or higher limits)">
+                        </div>
+                    </div>
+                    <div style="margin-top:12px;display:flex;gap:10px;align-items:center;">
+                        <button class="primary" id="repoScanBtn" onclick="scanRepo()">🔍 Scan Repository</button>
+                        <span style="color:#aaa;font-size:0.82em;">Public repos only without a token &nbsp;·&nbsp; Up to 60 files scanned</span>
+                    </div>
+                    <div id="repoScanSpinner" style="display:none;margin-top:10px;color:#667eea;font-size:0.9em;">&#9203; Scanning&hellip;</div>
+                    <div id="repoScanError" style="display:none;margin-top:10px;padding:10px 14px;border-radius:4px;border-left:4px solid #dc3545;background:#f8d7da;color:#721c24;font-size:0.9em;"></div>
+                </div>
+                <div id="repoScanResults" style="display:none;"></div>
             </div>
         </div>
         
@@ -971,6 +996,82 @@ def create_app(bom: Optional[CryptoBOM] = None):
                 document.getElementById('add-asset').querySelector('form').scrollIntoView({behavior:'smooth'});
             }
 
+            function scanRepo() {
+                const repo = document.getElementById('repoInput').value.trim();
+                if (!repo) { alert('Please enter a repository.'); return; }
+                const token = document.getElementById('repoToken').value.trim();
+                document.getElementById('repoScanSpinner').style.display = 'block';
+                document.getElementById('repoScanError').style.display = 'none';
+                document.getElementById('repoScanResults').style.display = 'none';
+                document.getElementById('repoScanBtn').disabled = true;
+                fetch('/api/scan-repo', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({repo, token})
+                }).then(r => r.json()).then(data => {
+                    document.getElementById('repoScanSpinner').style.display = 'none';
+                    document.getElementById('repoScanBtn').disabled = false;
+                    if (data.error) {
+                        const e = document.getElementById('repoScanError');
+                        e.textContent = '\u2717 ' + data.error;
+                        e.style.display = 'block';
+                        return;
+                    }
+                    const RC = {CRITICAL:'#dc3545',HIGH:'#fd7e14',MEDIUM:'#ffc107',LOW:'#28a745'};
+                    const RT = {CRITICAL:'white',  HIGH:'white',  MEDIUM:'#333',   LOW:'white'};
+                    const findings = data.findings || [];
+                    const crit = findings.filter(f => f.severity==='CRITICAL').length;
+                    const high = findings.filter(f => f.severity==='HIGH').length;
+                    const med  = findings.filter(f => f.severity==='MEDIUM').length;
+
+                    let html = '<div class="card">';
+                    // Header
+                    html += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px;">';
+                    html += '<div><strong style="font-size:1.05em;">' + data.owner + '/' + data.repo + '</strong>'
+                          + '<span style="color:#aaa;font-size:0.85em;margin-left:8px;">' + data.files_scanned + ' of ' + data.total_files + ' files scanned</span></div>';
+                    html += '<div style="display:flex;gap:8px;">';
+                    if (crit) html += '<span style="background:#dc3545;color:white;padding:3px 10px;border-radius:10px;font-size:0.82em;font-weight:700;">' + crit + ' CRITICAL</span>';
+                    if (high) html += '<span style="background:#fd7e14;color:white;padding:3px 10px;border-radius:10px;font-size:0.82em;font-weight:700;">' + high + ' HIGH</span>';
+                    if (med)  html += '<span style="background:#ffc107;color:#333;padding:3px 10px;border-radius:10px;font-size:0.82em;font-weight:700;">' + med + ' MEDIUM</span>';
+                    if (!findings.length) html += '<span style="background:#28a745;color:white;padding:3px 10px;border-radius:10px;font-size:0.82em;font-weight:700;">\u2713 No issues found</span>';
+                    html += '</div></div>';
+
+                    if (!findings.length) {
+                        html += '<div style="text-align:center;padding:30px;color:#aaa;"><div style="font-size:2em;margin-bottom:8px;">\u2705</div>'
+                              + '<div style="font-size:1em;color:#28a745;font-weight:600;">No cryptographic vulnerabilities detected!</div></div>';
+                    } else {
+                        html += '<div style="overflow-x:auto;"><table><thead><tr>'
+                              + '<th>Severity</th><th>Issue</th><th>File</th><th>Line</th><th>Snippet</th><th>Fix</th>'
+                              + '</tr></thead><tbody>';
+                        findings.forEach(f => {
+                            const bc = RC[f.severity] || '#6c757d';
+                            const bt = RT[f.severity] || 'white';
+                            const safeSnip = f.snippet.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                            const safeFile = f.file.replace(/"/g,'&quot;');
+                            html += '<tr>'
+                                + '<td><span style="background:' + bc + ';color:' + bt + ';padding:3px 8px;border-radius:10px;font-size:0.78em;font-weight:700;">' + f.severity + '</span></td>'
+                                + '<td style="font-weight:600;font-size:0.88em;">' + f.label + '</td>'
+                                + '<td style="font-size:0.78em;color:#555;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + safeFile + '">' + f.file + '</td>'
+                                + '<td style="text-align:center;color:#888;font-size:0.85em;">' + f.line + '</td>'
+                                + '<td><code style="background:#f5f5f5;padding:2px 6px;border-radius:3px;font-size:0.78em;color:#c7254e;display:block;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + safeSnip + '</code></td>'
+                                + '<td style="font-size:0.8em;color:#555;max-width:200px;">' + f.note + '</td>'
+                                + '</tr>';
+                        });
+                        html += '</tbody></table></div>';
+                    }
+                    html += '</div>';
+                    const wrap = document.getElementById('repoScanResults');
+                    wrap.innerHTML = html;
+                    wrap.style.display = 'block';
+                }).catch(err => {
+                    document.getElementById('repoScanSpinner').style.display = 'none';
+                    document.getElementById('repoScanBtn').disabled = false;
+                    const e = document.getElementById('repoScanError');
+                    e.textContent = '\u2717 ' + err.message;
+                    e.style.display = 'block';
+                });
+            }
+
             window.onload = function() { loadDashboard(); };
         </script>
     </body>
@@ -1432,6 +1533,146 @@ def create_app(bom: Optional[CryptoBOM] = None):
         tmp = os.path.join(tempfile.gettempdir(), f'cbom_export_{session["sid"]}.csv')
         bom.export_csv(tmp)
         return send_file(tmp, as_attachment=True, download_name='cbom_export.csv')
+
+    @app.route('/api/scan-repo', methods=['POST'])
+    def api_scan_repo():
+        import urllib.request
+        import urllib.error
+        import re as _re
+
+        data = request.get_json(force=True, silent=True) or {}
+        raw   = (data.get('repo')  or '').strip().rstrip('/')
+        token = (data.get('token') or '').strip()
+
+        # Parse owner/repo from URL or bare "owner/repo"
+        if 'github.com/' in raw:
+            parts = raw.split('github.com/')[-1].split('/')
+        else:
+            parts = raw.split('/')
+        if len(parts) < 2 or not parts[0] or not parts[1]:
+            return jsonify({'error': 'Enter a valid GitHub repo, e.g. owner/repo'})
+
+        owner = parts[0]
+        repo  = parts[1].replace('.git', '')
+
+        # Validate to prevent URL injection
+        if not _re.match(r'^[A-Za-z0-9_.\-]+$', owner) or not _re.match(r'^[A-Za-z0-9_.\-]+$', repo):
+            return jsonify({'error': 'Invalid repository name'})
+
+        # Validate token format (GitHub tokens are alphanumeric + underscore)
+        if token and not _re.match(r'^[A-Za-z0-9_\-]+$', token):
+            token = ''
+
+        headers = {'User-Agent': 'C-BOM-Scanner/1.0', 'Accept': 'application/vnd.github+json'}
+        if token:
+            headers['Authorization'] = 'Bearer ' + token
+
+        def gh_get(url):
+            req = urllib.request.Request(url, headers=headers)
+            try:
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    return json.loads(r.read().decode())
+            except urllib.error.HTTPError as exc:
+                body = exc.read().decode(errors='replace')
+                if exc.code == 404:
+                    raise RuntimeError('Repository not found or is private (add a token for private repos)')
+                if exc.code == 403:
+                    raise RuntimeError('GitHub rate limit reached — add a personal access token to increase the limit')
+                raise RuntimeError(f'GitHub API error {exc.code}: {body[:200]}')
+
+        try:
+            repo_info = gh_get(f'https://api.github.com/repos/{owner}/{repo}')
+        except RuntimeError as exc:
+            return jsonify({'error': str(exc)})
+
+        default_branch = repo_info.get('default_branch', 'main')
+
+        try:
+            tree_data = gh_get(f'https://api.github.com/repos/{owner}/{repo}/git/trees/{default_branch}?recursive=1')
+        except RuntimeError as exc:
+            return jsonify({'error': str(exc)})
+
+        SOURCE_EXTS = {'.py', '.js', '.ts', '.java', '.go', '.rb', '.php',
+                       '.c', '.cpp', '.cs', '.kt', '.swift', '.rs', '.tsx', '.jsx'}
+        files = [
+            item['path'] for item in tree_data.get('tree', [])
+            if item.get('type') == 'blob'
+            and any(item['path'].endswith(ext) for ext in SOURCE_EXTS)
+            and item.get('size', 0) < 150_000
+        ][:60]
+
+        PATTERNS = [
+            (r'hashlib\.md5\b|hashlib\.sha1\b|MessageDigest\.getInstance\s*\(\s*["\']MD5["\']|MessageDigest\.getInstance\s*\(\s*["\']SHA-1["\']',
+             'Weak Hash (MD5/SHA-1)', 'HIGH', 'Use SHA-256 or SHA-3 instead'),
+            (r'\bMD5\s*\(|\bSHA1\s*\(|\bnew\s+MD5\b',
+             'Weak Hash Reference', 'MEDIUM', 'Verify this is not used for security-sensitive hashing'),
+            (r'\bRC4\b|\barcfour\b|\bRC2\b',
+             'Broken Cipher (RC4/RC2)', 'CRITICAL', 'RC4/RC2 are cryptographically broken — use AES-256-GCM'),
+            (r'\bDES\b(?![A-Za-z_])|\b3DES\b|\bTripleDES\b|\bDESede\b',
+             'Broken Cipher (DES/3DES)', 'CRITICAL', 'DES/3DES are broken — use AES-256-GCM'),
+            (r'MODE_ECB|AES\.MODE_ECB|Cipher\.getInstance\s*\(\s*["\']AES["\'](?!\s*,)|/ECB/',
+             'Insecure AES-ECB Mode', 'HIGH', 'ECB leaks patterns — use AES-GCM or AES-CBC with HMAC'),
+            (r'\bSSLv2\b|\bSSLv3\b|\bTLSv1\b(?![\._23])|ssl\.PROTOCOL_SSLv|ssl\.PROTOCOL_TLSv1\b(?![\._2])',
+             'Deprecated TLS Version', 'HIGH', 'Use TLS 1.2 or TLS 1.3'),
+            (r'verify\s*=\s*False|CERT_NONE|check_hostname\s*=\s*False|NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*["\']0["\']|rejectUnauthorized\s*:\s*false',
+             'TLS Verification Disabled', 'CRITICAL', 'Never disable certificate verification in production'),
+            (r'\bMath\.random\s*\(\s*\)|\brandom\.random\s*\(\s*\)|\brandom\.randint\s*\(|\brand\s*\(\s*\)',
+             'Weak PRNG', 'MEDIUM', 'Use a cryptographically secure random source (secrets, crypto.getRandomValues)'),
+            (r'(?:RSA|rsa)(?:\.generate|\.importKey|KeyPairGenerator)\s*\(\s*(?:512|768|1024)\b|generateKeyPair\s*\(\s*["\']rsa["\']\s*,\s*\{\s*modulusLength\s*:\s*(?:512|768|1024)\b',
+             'Undersized RSA Key (<= 1024 bit)', 'HIGH', 'Use RSA-2048 minimum; RSA-4096 preferred'),
+            (r'-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----|-----BEGIN\s+EC\s+PRIVATE\s+KEY-----|-----BEGIN\s+OPENSSH\s+PRIVATE\s+KEY-----',
+             'Hardcoded Private Key', 'CRITICAL', 'Never commit private keys — use environment variables or a secrets manager'),
+            (r'(?:password|passwd|secret|api_key|apikey|api_secret)\s*=\s*["\'][^"\']{4,}["\']',
+             'Hardcoded Secret/Password', 'HIGH', 'Move secrets to environment variables or a secrets manager'),
+            (r'\bcrc32\s*\(|\bzlib\.crc32\b|\bCRC32\b',
+             'CRC Used as Hash', 'MEDIUM', 'CRC is not a cryptographic hash — use SHA-256 for integrity checks'),
+        ]
+
+        findings = []
+        files_scanned = 0
+
+        for path in files:
+            raw_url = f'https://raw.githubusercontent.com/{owner}/{repo}/{default_branch}/{path}'
+            try:
+                req = urllib.request.Request(raw_url, headers={'User-Agent': 'C-BOM-Scanner/1.0'})
+                with urllib.request.urlopen(req, timeout=8) as r:
+                    content = r.read().decode('utf-8', errors='replace')
+            except Exception:
+                continue
+
+            files_scanned += 1
+            lines = content.splitlines()
+
+            for pattern, label, severity, note in PATTERNS:
+                seen_in_file = 0
+                for i, line in enumerate(lines, 1):
+                    stripped = line.strip()
+                    # Skip pure comment lines
+                    if stripped.startswith('#') or stripped.startswith('//') or stripped.startswith('*'):
+                        continue
+                    if _re.search(pattern, line, _re.IGNORECASE):
+                        findings.append({
+                            'file': path,
+                            'line': i,
+                            'severity': severity,
+                            'label': label,
+                            'note': note,
+                            'snippet': line.strip()[:120],
+                        })
+                        seen_in_file += 1
+                        if seen_in_file >= 3:  # cap matches per pattern per file
+                            break
+
+        SEV_ORDER = {'CRITICAL': 0, 'HIGH': 1, 'MEDIUM': 2, 'LOW': 3}
+        findings.sort(key=lambda x: (SEV_ORDER.get(x['severity'], 9), x['file'], x['line']))
+
+        return jsonify({
+            'owner': owner,
+            'repo': repo,
+            'files_scanned': files_scanned,
+            'total_files': len(files),
+            'findings': findings,
+        })
 
     return app
 
