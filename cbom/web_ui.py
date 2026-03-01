@@ -1026,19 +1026,24 @@ def create_app(bom: Optional[CryptoBOM] = None):
 
                     let html = '<div class="card">';
                     // Header
-                    html += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px;">';
-                    html += '<div><strong style="font-size:1.05em;">' + data.owner + '/' + data.repo + '</strong>'
-                          + '<span style="color:#aaa;font-size:0.85em;margin-left:8px;">' + data.files_scanned + ' of ' + data.total_files + ' files scanned</span></div>';
-                    html += '<div style="display:flex;gap:8px;">';
+                    html += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px;">';
+                    html += '<div><strong style="font-size:1.05em;">' + data.owner + '/' + data.repo + '</strong></div>';
+                    html += '<div style="display:flex;gap:8px;flex-wrap:wrap;">';
                     if (crit) html += '<span style="background:#dc3545;color:white;padding:3px 10px;border-radius:10px;font-size:0.82em;font-weight:700;">' + crit + ' CRITICAL</span>';
                     if (high) html += '<span style="background:#fd7e14;color:white;padding:3px 10px;border-radius:10px;font-size:0.82em;font-weight:700;">' + high + ' HIGH</span>';
                     if (med)  html += '<span style="background:#ffc107;color:#333;padding:3px 10px;border-radius:10px;font-size:0.82em;font-weight:700;">' + med + ' MEDIUM</span>';
                     if (!findings.length) html += '<span style="background:#28a745;color:white;padding:3px 10px;border-radius:10px;font-size:0.82em;font-weight:700;">\u2713 No issues found</span>';
                     html += '</div></div>';
+                    // Meta row
+                    html += '<div style="font-size:0.8em;color:#aaa;margin-bottom:14px;">';
+                    html += data.files_scanned + ' source files scanned';
+                    if (data.test_files_skipped) html += ' &nbsp;\u00b7&nbsp; <span style="color:#667eea;">' + data.test_files_skipped + ' test/fixture files skipped</span>';
+                    html += '</div>';
 
                     if (!findings.length) {
                         html += '<div style="text-align:center;padding:30px;color:#aaa;"><div style="font-size:2em;margin-bottom:8px;">\u2705</div>'
-                              + '<div style="font-size:1em;color:#28a745;font-weight:600;">No cryptographic vulnerabilities detected!</div></div>';
+                              + '<div style="font-size:1em;color:#28a745;font-weight:600;">No cryptographic vulnerabilities detected in scanned files!</div>'
+                              + '<div style="font-size:0.82em;color:#aaa;margin-top:6px;">Note: test/fixture files and comment-only lines were excluded.</div></div>';
                     } else {
                         html += '<div style="overflow-x:auto;"><table><thead><tr>'
                               + '<th>Severity</th><th>Issue</th><th>File</th><th>Line</th><th>Snippet</th><th>Fix</th>'
@@ -1059,7 +1064,7 @@ def create_app(bom: Optional[CryptoBOM] = None):
                         });
                         html += '</tbody></table></div>';
                     }
-                    html += '</div>';
+                    html += '</div>'; 
                     const wrap = document.getElementById('repoScanResults');
                     wrap.innerHTML = html;
                     wrap.style.display = 'block';
@@ -1594,38 +1599,107 @@ def create_app(bom: Optional[CryptoBOM] = None):
 
         SOURCE_EXTS = {'.py', '.js', '.ts', '.java', '.go', '.rb', '.php',
                        '.c', '.cpp', '.cs', '.kt', '.swift', '.rs', '.tsx', '.jsx'}
-        files = [
+
+        # Skip test/fixture/example/vendor files to reduce false positives
+        TEST_HINTS = ('/test/', '/tests/', '/spec/', '/__tests__/', '/fixture', '/fixtures/',
+                      '/example', '/examples/', '/sample', '/mock', '/stub', '/vendor/',
+                      'test_', '_test.', '.test.', '.spec.', '_spec.')
+
+        all_source = [
             item['path'] for item in tree_data.get('tree', [])
             if item.get('type') == 'blob'
             and any(item['path'].endswith(ext) for ext in SOURCE_EXTS)
             and item.get('size', 0) < 150_000
-        ][:60]
+        ]
+        production_files = [p for p in all_source
+                            if not any(h in ('/' + p).lower() for h in TEST_HINTS)]
+        test_files_skipped = len(all_source) - len(production_files)
+        files = production_files[:60]
 
+        # Regex to detect placeholder/fake values in secret strings
+        PLACEHOLDER_RE = _re.compile(
+            r'example|your_|changeme|replace|placeholder|xxxxxxx|aaaaaaa|'
+            r'password123|secret123|fake|mock|dummy|<[A-Z_]+>|\.\.\.|'
+            r'insert|todo|fixme|enter|provide|here',
+            _re.IGNORECASE
+        )
+
+        # Detect crypto-related imports (for context-aware PRNG check)
+        CRYPTO_IMPORT_RE = _re.compile(
+            r'import\s+(?:hashlib|hmac|ssl|cryptography|Crypto|jwt|bcrypt|argon2|nacl|OpenSSL)'
+            r"|require\s*\(['\"](?:crypto|node:crypto|bcrypt|jsonwebtoken)['\"])",
+            _re.IGNORECASE
+        )
+
+        # Each entry: (regex, label, severity, note, requires_crypto_context)
         PATTERNS = [
-            (r'hashlib\.md5\b|hashlib\.sha1\b|MessageDigest\.getInstance\s*\(\s*["\']MD5["\']|MessageDigest\.getInstance\s*\(\s*["\']SHA-1["\']',
-             'Weak Hash (MD5/SHA-1)', 'HIGH', 'Use SHA-256 or SHA-3 instead'),
-            (r'\bMD5\s*\(|\bSHA1\s*\(|\bnew\s+MD5\b',
-             'Weak Hash Reference', 'MEDIUM', 'Verify this is not used for security-sensitive hashing'),
-            (r'\bRC4\b|\barcfour\b|\bRC2\b',
-             'Broken Cipher (RC4/RC2)', 'CRITICAL', 'RC4/RC2 are cryptographically broken — use AES-256-GCM'),
-            (r'\bDES\b(?![A-Za-z_])|\b3DES\b|\bTripleDES\b|\bDESede\b',
-             'Broken Cipher (DES/3DES)', 'CRITICAL', 'DES/3DES are broken — use AES-256-GCM'),
-            (r'MODE_ECB|AES\.MODE_ECB|Cipher\.getInstance\s*\(\s*["\']AES["\'](?!\s*,)|/ECB/',
-             'Insecure AES-ECB Mode', 'HIGH', 'ECB leaks patterns — use AES-GCM or AES-CBC with HMAC'),
-            (r'\bSSLv2\b|\bSSLv3\b|\bTLSv1\b(?![\._23])|ssl\.PROTOCOL_SSLv|ssl\.PROTOCOL_TLSv1\b(?![\._2])',
-             'Deprecated TLS Version', 'HIGH', 'Use TLS 1.2 or TLS 1.3'),
-            (r'verify\s*=\s*False|CERT_NONE|check_hostname\s*=\s*False|NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*["\']0["\']|rejectUnauthorized\s*:\s*false',
-             'TLS Verification Disabled', 'CRITICAL', 'Never disable certificate verification in production'),
-            (r'\bMath\.random\s*\(\s*\)|\brandom\.random\s*\(\s*\)|\brandom\.randint\s*\(|\brand\s*\(\s*\)',
-             'Weak PRNG', 'MEDIUM', 'Use a cryptographically secure random source (secrets, crypto.getRandomValues)'),
-            (r'(?:RSA|rsa)(?:\.generate|\.importKey|KeyPairGenerator)\s*\(\s*(?:512|768|1024)\b|generateKeyPair\s*\(\s*["\']rsa["\']\s*,\s*\{\s*modulusLength\s*:\s*(?:512|768|1024)\b',
-             'Undersized RSA Key (<= 1024 bit)', 'HIGH', 'Use RSA-2048 minimum; RSA-4096 preferred'),
-            (r'-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----|-----BEGIN\s+EC\s+PRIVATE\s+KEY-----|-----BEGIN\s+OPENSSH\s+PRIVATE\s+KEY-----',
-             'Hardcoded Private Key', 'CRITICAL', 'Never commit private keys — use environment variables or a secrets manager'),
-            (r'(?:password|passwd|secret|api_key|apikey|api_secret)\s*=\s*["\'][^"\']{4,}["\']',
-             'Hardcoded Secret/Password', 'HIGH', 'Move secrets to environment variables or a secrets manager'),
-            (r'\bcrc32\s*\(|\bzlib\.crc32\b|\bCRC32\b',
-             'CRC Used as Hash', 'MEDIUM', 'CRC is not a cryptographic hash — use SHA-256 for integrity checks'),
+            (r'hashlib\.md5\b|hashlib\.sha1\b'
+             r'|MessageDigest\.getInstance\s*\(\s*["\'](?:MD5|SHA-1)["\']',
+             'Weak Hash (MD5/SHA-1)', 'HIGH',
+             'Use SHA-256 or SHA-3 instead', False),
+
+            (r'\bRC4\b|\barcfour\b',
+             'Broken Cipher (RC4)', 'CRITICAL',
+             'RC4 is cryptographically broken \u2014 use AES-256-GCM', False),
+
+            (r'\bDESede\b|\b3DES\b|\bTripleDES\b'
+             r"|Cipher\.getInstance\s*\(\s*['\"]DES"
+             r'|DES\.new\s*\(|from\s+Crypto\.Cipher\s+import\s+DES\b',
+             'Broken Cipher (DES/3DES)', 'CRITICAL',
+             'DES/3DES are broken \u2014 use AES-256-GCM', False),
+
+            (r'MODE_ECB|AES\.MODE_ECB'
+             r"|Cipher\.getInstance\s*\(\s*['\"]AES/ECB"
+             r'|/ECB/',
+             'Insecure AES-ECB Mode', 'HIGH',
+             'ECB leaks patterns \u2014 use AES-GCM or AES-CBC with HMAC', False),
+
+            (r'ssl\.PROTOCOL_SSLv|ssl\.PROTOCOL_TLSv1(?![_2])'
+             r'|PROTOCOL_SSLv2|PROTOCOL_SSLv3',
+             'Deprecated TLS Version in Code', 'HIGH',
+             'Use ssl.PROTOCOL_TLS_CLIENT with minimum_version=TLSVersion.TLSv1_2', False),
+
+            (r'verify\s*=\s*False|CERT_NONE|check_hostname\s*=\s*False'
+             r"|NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*['\"]0['\"]"
+             r'|rejectUnauthorized\s*:\s*false',
+             'TLS Verification Disabled', 'CRITICAL',
+             'Never disable certificate verification in production', False),
+
+            (r'-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----'
+             r'|-----BEGIN\s+EC\s+PRIVATE\s+KEY-----'
+             r'|-----BEGIN\s+OPENSSH\s+PRIVATE\s+KEY-----',
+             'Hardcoded Private Key', 'CRITICAL',
+             'Never commit private keys \u2014 use a secrets manager or environment variables', False),
+
+            (r'(?:password|passwd|api_key|apikey|api_secret|auth_token|access_token|client_secret)'
+             r"\s*=\s*['\"][A-Za-z0-9/+_\-\\.@!#$%^&*]{8,}['\"]",
+             'Hardcoded Secret/Credential', 'HIGH',
+             'Move secrets to environment variables or a secrets manager', False),
+
+            (r'RSA\.generate\s*\(\s*(?:512|768|1024)\b'
+             r"|generateKeyPair\s*\(\s*['\"]rsa['\"]\s*,\s*\{\s*modulusLength\s*:\s*(?:512|768|1024)\b",
+             'Undersized RSA Key (\u22641024-bit)', 'HIGH',
+             'Use RSA-2048 minimum; RSA-4096 or ECDSA P-256 preferred', False),
+
+            (r'pbkdf2_hmac\s*\([^,]+,\s*[^,]+,\s*[^,]+,\s*[1-9]\d{0,3}\s*[,)]'
+             r'|PBKDF2.*?iterations\s*=\s*[1-9]\d{0,3}\b',
+             'Low PBKDF2 Iterations', 'HIGH',
+             'OWASP 2023 recommends \u2265600,000 iterations for PBKDF2-SHA256', False),
+
+            (r'\bpickle\.loads?\s*\(|\bpickle\.load\s*\(',
+             'Insecure Deserialization (pickle)', 'CRITICAL',
+             'pickle.load on untrusted input allows remote code execution \u2014 use JSON', False),
+
+            (r"(?:iv|nonce|aes_key|secret_key)\s*=\s*b?['\"][0-9a-fA-F]{16,}['\"]",
+             'Hardcoded Crypto IV/Key (hex)', 'CRITICAL',
+             'Never hardcode cryptographic keys or IVs \u2014 use secure key generation', False),
+
+            # Only flag PRNG in files that also import crypto libraries
+            (r'\bMath\.random\s*\(\s*\)'
+             r'|\brandom\.choice\s*\(|\brandom\.randint\s*\(|\brandom\.random\s*\(\s*\)',
+             'Weak PRNG in crypto context', 'MEDIUM',
+             'Use secrets module (Python) or crypto.getRandomValues (JS) for security-sensitive randomness',
+             True),
         ]
 
         findings = []
@@ -1642,26 +1716,45 @@ def create_app(bom: Optional[CryptoBOM] = None):
 
             files_scanned += 1
             lines = content.splitlines()
+            is_crypto_file = bool(CRYPTO_IMPORT_RE.search(content[:4000]))
 
-            for pattern, label, severity, note in PATTERNS:
+            for entry in PATTERNS:
+                pattern, label, severity, note = entry[0], entry[1], entry[2], entry[3]
+                requires_crypto_ctx = entry[4] if len(entry) > 4 else False
+
+                if requires_crypto_ctx and not is_crypto_file:
+                    continue
+
                 seen_in_file = 0
                 for i, line in enumerate(lines, 1):
                     stripped = line.strip()
                     # Skip pure comment lines
-                    if stripped.startswith('#') or stripped.startswith('//') or stripped.startswith('*'):
+                    if (stripped.startswith('#') or stripped.startswith('//')
+                            or stripped.startswith('*') or stripped.startswith('"""')
+                            or stripped.startswith("'''")):
                         continue
-                    if _re.search(pattern, line, _re.IGNORECASE):
-                        findings.append({
-                            'file': path,
-                            'line': i,
-                            'severity': severity,
-                            'label': label,
-                            'note': note,
-                            'snippet': line.strip()[:120],
-                        })
-                        seen_in_file += 1
-                        if seen_in_file >= 3:  # cap matches per pattern per file
-                            break
+                    if not _re.search(pattern, line, _re.IGNORECASE):
+                        continue
+
+                    # Extra filter for hardcoded secret: skip placeholder/env-var lines
+                    if label == 'Hardcoded Secret/Credential':
+                        m = _re.search(r"""['"]([^'"]{4,})['"]""", line)
+                        if m and PLACEHOLDER_RE.search(m.group(1)):
+                            continue
+                        if _re.search(r'os\.environ|os\.getenv|process\.env|getpass\.getpass', line):
+                            continue
+
+                    findings.append({
+                        'file': path,
+                        'line': i,
+                        'severity': severity,
+                        'label': label,
+                        'note': note,
+                        'snippet': stripped[:120],
+                    })
+                    seen_in_file += 1
+                    if seen_in_file >= 3:
+                        break
 
         SEV_ORDER = {'CRITICAL': 0, 'HIGH': 1, 'MEDIUM': 2, 'LOW': 3}
         findings.sort(key=lambda x: (SEV_ORDER.get(x['severity'], 9), x['file'], x['line']))
@@ -1670,7 +1763,8 @@ def create_app(bom: Optional[CryptoBOM] = None):
             'owner': owner,
             'repo': repo,
             'files_scanned': files_scanned,
-            'total_files': len(files),
+            'total_files': len(all_source),
+            'test_files_skipped': test_files_skipped,
             'findings': findings,
         })
 
