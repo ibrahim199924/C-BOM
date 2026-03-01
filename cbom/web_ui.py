@@ -1627,7 +1627,7 @@ def create_app(bom: Optional[CryptoBOM] = None):
         # Detect crypto-related imports (for context-aware PRNG check)
         CRYPTO_IMPORT_RE = _re.compile(
             r'import\s+(?:hashlib|hmac|ssl|cryptography|Crypto|jwt|bcrypt|argon2|nacl|OpenSSL)'
-            r"|require\s*\(['\"](?:crypto|node:crypto|bcrypt|jsonwebtoken)['\"])",
+            r"|require\s*\(['\"](?:crypto|node:crypto|bcrypt|jsonwebtoken)['\"]",
             _re.IGNORECASE
         )
 
